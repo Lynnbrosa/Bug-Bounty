@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from bounty_agent.config import Config
+    from bounty_agent.persistence import ToolCache
 
 
 logger = get_logger(__name__)
@@ -62,22 +63,35 @@ async def run_recon_pipeline(  # noqa: PLR0912 - linear pipeline of optional ste
     scan_id: UUID | None = None,
     max_urls: int = 50,
     intrusive_ok: bool = False,
+    cache: ToolCache | None = None,
 ) -> ReconResult:
     """Execute the configured recon pipeline.
 
     ``intrusive_ok`` must be ``True`` for ``katana`` and ``naabu`` to
     run; otherwise they are silently skipped with an audit entry.
+
+    ``cache`` short-circuits the passive tools (subfinder, waybackurls)
+    when a fresh entry exists for the same target.
     """
     registry = registry or ToolRegistry()
     flags = config.tools
+    cache_ttl = config.tools_cache.ttl_seconds if config.tools_cache.enabled else 0
     subdomains: list[str] = []
     urls: list[str] = []
     findings: list[Finding] = []
     errors: list[str] = []
 
     if flags.subfinder:
-        result = await _safe_run(registry, "subfinder", target, scope, errors, intrusive_ok=False)
-        subdomains = result.items if result else []
+        items = await _cached_safe_run(
+            registry,
+            "subfinder",
+            target,
+            scope,
+            errors,
+            cache=cache,
+            cache_ttl=cache_ttl,
+        )
+        subdomains = items
 
     if flags.dnsx and subdomains:
         # Resolve only the discovered subdomains, not the original target.
@@ -90,9 +104,16 @@ async def run_recon_pipeline(  # noqa: PLR0912 - linear pipeline of optional ste
         subdomains = sorted(set(resolved)) if resolved else subdomains
 
     if flags.waybackurls:
-        result = await _safe_run(registry, "waybackurls", target, scope, errors, intrusive_ok=False)
-        if result:
-            urls.extend(result.items)
+        items = await _cached_safe_run(
+            registry,
+            "waybackurls",
+            target,
+            scope,
+            errors,
+            cache=cache,
+            cache_ttl=cache_ttl,
+        )
+        urls.extend(items)
 
     if flags.katana:
         result = await _safe_run(
@@ -145,6 +166,29 @@ async def run_recon_pipeline(  # noqa: PLR0912 - linear pipeline of optional ste
         findings=findings,
         errors=errors,
     )
+
+
+async def _cached_safe_run(
+    registry: ToolRegistry,
+    name: str,
+    target: str,
+    scope: ScopePolicy,
+    errors: list[str],
+    cache: ToolCache | None,
+    cache_ttl: int,
+) -> list[str]:
+    """Cache-aware ``_safe_run`` for passive tools."""
+    if cache is not None and cache_ttl > 0:
+        cached = cache.get(name, target)
+        if cached is not None:
+            audit("recon.cache_hit", tool=name, target=target, items=len(cached))
+            return cached
+
+    result = await _safe_run(registry, name, target, scope, errors, intrusive_ok=False)
+    items = result.items if result else []
+    if cache is not None and cache_ttl > 0 and result is not None and not result.skipped:
+        cache.set(name, target, items, cache_ttl)
+    return items
 
 
 async def _safe_run(

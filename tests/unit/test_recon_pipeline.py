@@ -174,6 +174,74 @@ class TestNaabu:
         assert all(f.severity.value == "info" for f in result.findings)
 
 
+class TestCache:
+    async def test_cache_hit_short_circuits_tool(self) -> None:
+        """If the cache has fresh data the wrapper is never invoked."""
+
+        class _ExplodingSubfinder(_StubTool):
+            name: ClassVar[str] = "subfinder"
+            description: ClassVar[str] = "boom"
+            intrusive: ClassVar[bool] = False
+            binary: ClassVar[str] = "subfinder-stub"
+            canned_items: ClassVar[list[str]] = []
+
+            async def run(  # type: ignore[override]
+                self,
+                target: str,  # noqa: ARG002
+                scope: ScopePolicy | None = None,  # noqa: ARG002
+            ) -> ToolResult:
+                raise AssertionError("subfinder should have been cached")
+
+        class _InMemoryCache:
+            def __init__(self) -> None:
+                self.store: dict[tuple[str, str], list[str]] = {}
+
+            def get(self, tool: str, target: str) -> list[str] | None:
+                return self.store.get((tool, target))
+
+            def set(self, tool: str, target: str, items: list[str], ttl_seconds: int) -> None:
+                _ = ttl_seconds
+                self.store[(tool, target)] = items
+
+        cache = _InMemoryCache()
+        cache.set("subfinder", "https://example.com/", ["pre.example.com"], 3600)
+
+        registry = _registry_with(_ExplodingSubfinder)
+        result = await run_recon_pipeline(
+            target="https://example.com/",
+            config=_config(subfinder=True, httpx=False),
+            scope=_scope(),
+            registry=registry,
+            cache=cache,  # type: ignore[arg-type]
+        )
+        assert "pre.example.com" in result.subdomains
+
+    async def test_cache_miss_writes_back(self) -> None:
+        class _InMemoryCache:
+            def __init__(self) -> None:
+                self.store: dict[tuple[str, str], list[str]] = {}
+
+            def get(self, tool: str, target: str) -> list[str] | None:
+                return self.store.get((tool, target))
+
+            def set(self, tool: str, target: str, items: list[str], ttl_seconds: int) -> None:
+                _ = ttl_seconds
+                self.store[(tool, target)] = items
+
+        cache = _InMemoryCache()
+        registry = _registry_with(
+            _make_stub("subfinder", ["fresh.example.com"]),
+        )
+        await run_recon_pipeline(
+            target="https://example.com/",
+            config=_config(subfinder=True, httpx=False),
+            scope=_scope(),
+            registry=registry,
+            cache=cache,  # type: ignore[arg-type]
+        )
+        assert cache.store[("subfinder", "https://example.com/")] == ["fresh.example.com"]
+
+
 class TestFailures:
     async def test_unknown_tool_in_registry_does_not_crash(self) -> None:
         # No subfinder in this registry; flag asks for it.

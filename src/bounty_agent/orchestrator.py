@@ -37,6 +37,7 @@ from bounty_agent.fuzzing import (
     ResponsibleFuzzer,
 )
 from bounty_agent.logging_setup import audit, bind_scan_context, get_logger
+from bounty_agent.persistence.tool_cache import NoopToolCache, ToolCache
 from bounty_agent.recon.pipeline import ReconResult, run_recon_pipeline
 from bounty_agent.recon.waf import detect_async as detect_waf_async
 from bounty_agent.scanners import (
@@ -68,6 +69,7 @@ class BountyAgent:
         scope: ScopePolicy | None = None,
         tool_registry: ToolRegistry | None = None,
         intrusive_ok: bool = False,
+        tool_cache: ToolCache | None = None,
     ) -> None:
         self.config = config
         self.scope = scope or config.scope.as_policy()
@@ -82,6 +84,7 @@ class BountyAgent:
         )
         self.tool_registry = tool_registry or ToolRegistry()
         self.intrusive_ok = intrusive_ok
+        self.tool_cache = tool_cache or NoopToolCache()
 
     async def scan(
         self,
@@ -202,6 +205,7 @@ class BountyAgent:
                 registry=self.tool_registry,
                 scan_id=scan_id,
                 intrusive_ok=self.intrusive_ok,
+                cache=self.tool_cache,
             )
         except ScopeViolation:
             raise

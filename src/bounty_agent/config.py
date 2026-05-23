@@ -135,6 +135,13 @@ class ToolsSettings(_FrozenModel):
     naabu: bool = False
 
 
+class ToolsCacheSettings(_FrozenModel):
+    """Cache for passive tool output (subfinder, waybackurls)."""
+
+    enabled: bool = True
+    ttl_seconds: int = 21600  # 6 hours
+
+
 class Config(BaseSettings):
     """Top-level configuration loaded from YAML and environment."""
 
@@ -156,6 +163,7 @@ class Config(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     tools: ToolsSettings = Field(default_factory=ToolsSettings)
+    tools_cache: ToolsCacheSettings = Field(default_factory=ToolsCacheSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -223,6 +231,7 @@ __all__ = [
     "PersistenceSettings",
     "ReportingSettings",
     "ScopeConfig",
+    "ToolsCacheSettings",
     "ToolsSettings",
     "WafSettings",
     "load_config",

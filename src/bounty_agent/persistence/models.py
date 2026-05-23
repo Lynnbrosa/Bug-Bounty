@@ -46,4 +46,16 @@ class FindingRow(Base):
     scan: Mapped[ScanRow] = relationship(back_populates="findings")
 
 
-__all__ = ["Base", "FindingRow", "ScanRow"]
+class ToolCacheRow(Base):
+    """Per-(tool, target) cache of passive recon output."""
+
+    __tablename__ = "tool_cache"
+
+    tool: Mapped[str] = mapped_column(String(64), primary_key=True)
+    target: Mapped[str] = mapped_column(String(512), primary_key=True)
+    items_json: Mapped[str] = mapped_column(Text)
+    cached_at: Mapped[datetime] = mapped_column(index=True)
+    ttl_seconds: Mapped[int]
+
+
+__all__ = ["Base", "FindingRow", "ScanRow", "ToolCacheRow"]

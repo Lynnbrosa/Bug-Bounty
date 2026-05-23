@@ -28,7 +28,10 @@ from bounty_agent.core import ScopeViolation, render_scan_result_json_schema
 from bounty_agent.logging_setup import audit, configure_logging
 from bounty_agent.orchestrator import BountyAgent, default_payload_registry
 from bounty_agent.persistence import (
+    NoopToolCache,
     ScanRepository,
+    SqlToolCache,
+    ToolCache,
     make_engine,
     make_session_factory,
 )
@@ -149,10 +152,12 @@ def scan_command(
         raise typer.Exit(code=3)
 
     payload_registry = default_payload_registry(config)
+    tool_cache = _build_tool_cache(config)
     agent = BountyAgent(
         config=config,
         payload_registry=payload_registry,
         intrusive_ok=intrusive_ok,
+        tool_cache=tool_cache,
     )
 
     preset_targets: list[str] | None = None
@@ -310,6 +315,17 @@ def _build_repository(config: object) -> ScanRepository:
     return ScanRepository(factory)
 
 
+def _build_tool_cache(config: object) -> ToolCache:
+    from bounty_agent.config import Config
+
+    assert isinstance(config, Config)
+    if not config.tools_cache.enabled or not config.persistence.enabled:
+        return NoopToolCache()
+    engine = make_engine(config.persistence.sqlite_path)
+    factory = make_session_factory(engine)
+    return SqlToolCache(session_factory=factory)
+
+
 history_app = typer.Typer(name="history", help="Inspect scan history.", no_args_is_help=True)
 app.add_typer(history_app)
 
@@ -420,6 +436,7 @@ def recon_command(
 
     scope = config.scope.as_policy()
     audit("cli.recon.invoked", target=target, intrusive=intrusive_ok)
+    cache = _build_tool_cache(config)
 
     try:
         result = asyncio.run(
@@ -428,6 +445,7 @@ def recon_command(
                 config=config,
                 scope=scope,
                 intrusive_ok=intrusive_ok,
+                cache=cache,
             )
         )
     except KeyboardInterrupt:

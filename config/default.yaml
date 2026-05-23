@@ -82,3 +82,10 @@ tools:
   dnsx: false
   katana: false
   naabu: false
+
+tools_cache:
+  # Cache for passive tools (subfinder, waybackurls). Reuses results
+  # for the same (tool, target) pair for the given TTL to reduce hits
+  # against public OSINT APIs. Stored alongside scans in the SQLite db.
+  enabled: true
+  ttl_seconds: 21600  # 6 hours
