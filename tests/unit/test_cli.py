@@ -82,6 +82,56 @@ def test_audit_missing_log_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert "not found" in (result.stdout + result.stderr)
 
 
+def test_recon_refuses_without_authorized() -> None:
+    result = runner.invoke(app, ["recon", "https://example.com/"])
+    assert result.exit_code == 2
+    assert "Refusing to scan" in (result.stdout + result.stderr)
+
+
+def test_recon_refuses_empty_allowlist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("scope:\n  allowlist: []\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["recon", "https://example.com/", "--config", str(config), "--authorized"],
+    )
+    assert result.exit_code == 3
+    assert "allowlist is empty" in (result.stdout + result.stderr)
+
+
+def test_recon_runs_and_writes_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # No external binaries installed in the test env, so the pipeline
+    # collects skip errors but exits cleanly.
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "scope:\n  allowlist: [example.com]\n"
+        "tools:\n  subfinder: true\n  waybackurls: false\n"
+        "  httpx: false\n  dnsx: false\n  katana: false\n  naabu: false\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "recon.json"
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "recon",
+            "https://example.com/",
+            "--config",
+            str(config),
+            "--authorized",
+            "--output",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert output.exists()
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["target"] == "https://example.com/"
+    assert "subdomains" in payload
+    assert "urls" in payload
+
+
 def test_tools_list_renders_all_known_tools() -> None:
     result = runner.invoke(app, ["tools", "list"])
     assert result.exit_code == 0

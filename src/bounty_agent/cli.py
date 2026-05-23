@@ -32,6 +32,7 @@ from bounty_agent.persistence import (
     make_engine,
     make_session_factory,
 )
+from bounty_agent.recon.pipeline import run_recon_pipeline
 from bounty_agent.reporting import write_reports
 from bounty_agent.tools import IntrusiveToolBlocked, ToolRegistry
 
@@ -355,6 +356,85 @@ def _packaged_default_config() -> Path:
     if not candidate.exists():
         raise FileNotFoundError(f"packaged default config not found at {candidate}")
     return candidate
+
+
+@app.command("recon")
+def recon_command(
+    target: Annotated[str, typer.Argument(help="Authorized target URL or domain.")],
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+    authorized: Annotated[
+        bool,
+        typer.Option("--authorized", help="Confirms you have explicit authorization."),
+    ] = False,
+    intrusive_ok: Annotated[
+        bool,
+        typer.Option("--intrusive", help="Allow katana, naabu and other intrusive tools."),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write the recon result as JSON to this path."),
+    ] = None,
+) -> None:
+    """Run only the external recon pipeline and print discovered surface."""
+    _confirm_authorisation(authorized, banner=False)
+    config = load_config(config_path)
+    configure_logging(
+        level=config.logging.level,
+        audit_log_path=config.logging.audit_log_path,
+    )
+    if not config.scope.allowlist:
+        err_console.print("[bold red]Refusing to scan.[/bold red] scope.allowlist is empty.")
+        raise typer.Exit(code=3)
+
+    scope = config.scope.as_policy()
+    audit("cli.recon.invoked", target=target, intrusive=intrusive_ok)
+
+    try:
+        result = asyncio.run(
+            run_recon_pipeline(
+                target=target,
+                config=config,
+                scope=scope,
+                intrusive_ok=intrusive_ok,
+            )
+        )
+    except KeyboardInterrupt:
+        err_console.print("[yellow]Interrupted by user.[/yellow]")
+        raise typer.Exit(code=130) from None
+
+    table = Table(title=f"Recon for {target}")
+    table.add_column("Bucket")
+    table.add_column("Count")
+    table.add_row("Subdomains", str(len(result.subdomains)))
+    table.add_row("URLs", str(len(result.urls)))
+    table.add_row("Port findings", str(len(result.findings)))
+    table.add_row("Errors", str(len(result.errors)))
+    console.print(table)
+
+    if result.subdomains:
+        console.print("\n[bold]Subdomains[/bold]")
+        for host in result.subdomains:
+            console.print(f"  {host}")
+    if result.urls:
+        console.print("\n[bold]URLs[/bold]")
+        for url in result.urls:
+            console.print(f"  {url}")
+    if result.errors:
+        console.print("\n[bold yellow]Errors[/bold yellow]")
+        for error in result.errors:
+            console.print(f"  - {error}")
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "target": target,
+            "subdomains": result.subdomains,
+            "urls": result.urls,
+            "findings": [f.model_dump(mode="json") for f in result.findings],
+            "errors": result.errors,
+        }
+        output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        console.print(f"[dim]written to {output}[/dim]")
 
 
 tools_app = typer.Typer(name="tools", help="External tool wrappers.", no_args_is_help=True)
