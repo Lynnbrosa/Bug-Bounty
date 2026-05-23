@@ -39,11 +39,11 @@ nuclei:
     - medium
   concurrency: 1
   rate_limit: 10
-  timeout_seconds: 120
+  timeout_seconds: 600    # full critical+high catalogue against one host can take 3-5 min
 
 fuzzing:
   enabled: true
-  max_endpoints: 5
+  max_endpoints: 25      # cap on URLs fuzzed/nuclei'd after recon; raise for wider surface
   payloads_per_param: 5
   categories:
     - sql_injection

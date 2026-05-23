@@ -86,11 +86,22 @@ def test_invalid_yaml_raises(tmp_path: Path) -> None:
         load_config(path)
 
 
-def test_unknown_field_is_rejected(tmp_path: Path) -> None:
+def test_unknown_field_is_ignored(tmp_path: Path) -> None:
+    """Top-level YAML sections that don't map to a Config field are silently
+    ignored.
+
+    This is the consequence of model_config extra='ignore', which is required
+    to prevent pydantic-settings from echoing secret values from .env in its
+    ValidationError payload (see config.py NOTE). Losing typo detection on
+    YAML keys is the cost of keeping ANTHROPIC_API_KEY out of tracebacks.
+    """
     path = tmp_path / "extra.yaml"
-    _write_yaml(path, "unknown_section:\n  foo: bar\n")
-    with pytest.raises(Exception):  # noqa: B017 - pydantic ValidationError
-        load_config(path)
+    _write_yaml(path, "unknown_section:\n  foo: bar\nagent:\n  max_requests_per_minute: 5\n")
+    config = load_config(path)
+    # Known fields still load correctly.
+    assert config.agent.max_requests_per_minute == 5
+    # Unknown section is dropped silently.
+    assert not hasattr(config, "unknown_section")
 
 
 def test_env_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

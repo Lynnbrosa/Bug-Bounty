@@ -80,7 +80,7 @@ class NucleiSettings(_FrozenModel):
     severity: tuple[str, ...] = ("critical", "high", "medium")
     concurrency: int = 1
     rate_limit: int = 10
-    timeout_seconds: int = 120
+    timeout_seconds: int = 600
 
     def as_nuclei_config(self) -> NucleiConfig:
         return NucleiConfig(
@@ -95,7 +95,7 @@ class NucleiSettings(_FrozenModel):
 
 class FuzzingSettings(_FrozenModel):
     enabled: bool = True
-    max_endpoints: int = 5
+    max_endpoints: int = 25
     payloads_per_param: int = 5
     categories: tuple[str, ...] = ("sql_injection", "xss", "path_traversal")
 
@@ -154,12 +154,20 @@ class LLMSettings(_FrozenModel):
 class Config(BaseSettings):
     """Top-level configuration loaded from YAML and environment."""
 
+    # NOTE on extra="ignore": with env_file=".env", pydantic-settings reads
+    # every line of the dotenv file regardless of env_prefix. Under
+    # extra="forbid", an unrelated key in .env (e.g. ANTHROPIC_API_KEY)
+    # raises ValidationError, and the error payload echoes the value as
+    # input_value — leaking the secret into logs and tracebacks. "ignore"
+    # makes those keys pass silently. The tradeoff: typos in BOUNTY_AGENT_*
+    # vars also pass silently. We rely on the YAML schema + tests for typo
+    # detection instead.
     model_config = SettingsConfigDict(
         env_prefix="BOUNTY_AGENT_",
         env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="forbid",
+        extra="ignore",
         frozen=True,
     )
 
