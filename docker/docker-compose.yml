@@ -1,0 +1,18 @@
+services:
+  bounty-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: bounty-agent:dev
+    volumes:
+      # Mount a host directory for reports and the SQLite history.
+      - ../reports:/home/bounty/reports
+      - ../logs:/home/bounty/logs
+      - ../bounty.sqlite:/home/bounty/bounty.sqlite
+      # Allow overriding the bundled config from the host.
+      - ../config:/etc/bounty-agent/config:ro
+      - ../nuclei-templates:/etc/bounty-agent/nuclei-templates:ro
+    environment:
+      BOUNTY_AGENT_CONFIG: /etc/bounty-agent/config/default.yaml
+    # default command shows --help so the container exits cleanly.
+    command: ["--help"]

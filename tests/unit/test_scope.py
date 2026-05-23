@@ -50,17 +50,13 @@ class TestHostMatching:
 
 class TestPathDenylist:
     def test_path_prefix_denied(self) -> None:
-        policy = ScopePolicy.from_iterables(
-            ["example.com"], path_denylist=["/admin"]
-        )
+        policy = ScopePolicy.from_iterables(["example.com"], path_denylist=["/admin"])
         assert policy.evaluate("https://example.com/admin").denied
         assert policy.evaluate("https://example.com/admin/users").denied
         assert policy.evaluate("https://example.com/public").allowed
 
     def test_path_denylist_does_not_match_substrings(self) -> None:
-        policy = ScopePolicy.from_iterables(
-            ["example.com"], path_denylist=["/admin"]
-        )
+        policy = ScopePolicy.from_iterables(["example.com"], path_denylist=["/admin"])
         assert policy.evaluate("https://example.com/administrator").allowed
 
 

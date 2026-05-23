@@ -35,9 +35,7 @@ def test_requires_auth_reduces_score() -> None:
 
 
 def test_score_is_capped_at_ten() -> None:
-    context = TargetContext(
-        is_production=True, affects_pii=True, affects_payment=True
-    )
+    context = TargetContext(is_production=True, affects_pii=True, affects_payment=True)
     assert score(_finding(Severity.CRITICAL), context) == 10.0
 
 

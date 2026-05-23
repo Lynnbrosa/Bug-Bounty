@@ -53,9 +53,7 @@ class ScopeConfig(_FrozenModel):
     )
 
     def as_policy(self) -> ScopePolicy:
-        return ScopePolicy.from_iterables(
-            list(self.allowlist), list(self.path_denylist)
-        )
+        return ScopePolicy.from_iterables(list(self.allowlist), list(self.path_denylist))
 
 
 class AgentConfig(_FrozenModel):

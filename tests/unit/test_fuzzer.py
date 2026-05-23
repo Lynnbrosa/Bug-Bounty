@@ -34,9 +34,7 @@ class TestInjectParam:
         assert url == "https://example.com/api?q=x"
 
     def test_replaces_existing_value(self) -> None:
-        url = ResponsibleFuzzer._inject_param(
-            "https://example.com/api?q=old&page=1", "q", "new"
-        )
+        url = ResponsibleFuzzer._inject_param("https://example.com/api?q=old&page=1", "q", "new")
         assert "q=new" in url
         assert "page=1" in url
 
@@ -58,9 +56,7 @@ class TestFuzzEndpoint:
 
         def _responder(request: httpx.Request) -> httpx.Response:
             if request.url.query:
-                return httpx.Response(
-                    200, text="You have an error in your SQL syntax"
-                )
+                return httpx.Response(200, text="You have an error in your SQL syntax")
             return httpx.Response(200, text="ok")
 
         respx_mock.get(url__startswith="https://allowed.example/search").mock(
@@ -101,9 +97,7 @@ class TestFuzzEndpoint:
         )
         async with httpx.AsyncClient() as client:
             with pytest.raises(ScopeViolation):
-                await fuzzer.fuzz_endpoint(
-                    client, "https://denied.example/", "q", "sql_injection"
-                )
+                await fuzzer.fuzz_endpoint(client, "https://denied.example/", "q", "sql_injection")
 
     async def test_transport_error_yields_no_finding(
         self,

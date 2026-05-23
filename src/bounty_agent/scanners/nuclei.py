@@ -181,9 +181,7 @@ class NucleiScanner:
                 url=url,
                 reason="binary not installed",
             )
-            raise NucleiNotInstalledError(
-                f"nuclei binary '{self.config.binary}' not found on PATH"
-            )
+            raise NucleiNotInstalledError(f"nuclei binary '{self.config.binary}' not found on PATH")
 
         cmd = self._build_command(url)
         logger.info("nuclei.starting", url=url, command=cmd)

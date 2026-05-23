@@ -38,9 +38,7 @@ def test_yaml_overrides_defaults(tmp_path: Path) -> None:
     assert config.scope.allowlist == ("a.example", "b.example")
 
 
-def test_env_overrides_yaml(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_env_overrides_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "config.yaml"
     _write_yaml(path, "agent:\n  max_requests_per_minute: 5\n")
     monkeypatch.setenv("BOUNTY_AGENT_AGENT__MAX_REQUESTS_PER_MINUTE", "7")
@@ -52,9 +50,7 @@ def test_scope_config_to_policy(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
     _write_yaml(
         path,
-        "scope:\n"
-        "  allowlist: [example.com]\n"
-        "  path_denylist: [/admin]\n",
+        "scope:\n  allowlist: [example.com]\n  path_denylist: [/admin]\n",
     )
     config = load_config(path)
     policy = config.scope.as_policy()
@@ -97,9 +93,7 @@ def test_unknown_field_is_rejected(tmp_path: Path) -> None:
         load_config(path)
 
 
-def test_env_config_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_env_config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "alt.yaml"
     _write_yaml(path, "agent:\n  max_requests_per_minute: 99\n")
     monkeypatch.setenv("BOUNTY_AGENT_CONFIG", str(path))

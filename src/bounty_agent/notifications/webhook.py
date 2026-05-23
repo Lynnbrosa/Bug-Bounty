@@ -82,10 +82,7 @@ class WebhookNotifier:
     def _build_payload(self, result: ScanResult, findings: list[Finding]) -> dict[str, object]:
         lines = [f"*{f.severity.value.upper()}* {f.title} - {f.url}" for f in findings]
         return {
-            "text": (
-                f"Bounty agent: {len(findings)} high-severity finding(s) on "
-                f"{result.target}"
-            ),
+            "text": (f"Bounty agent: {len(findings)} high-severity finding(s) on {result.target}"),
             "blocks": [
                 {
                     "type": "section",

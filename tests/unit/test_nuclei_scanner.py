@@ -138,9 +138,7 @@ class TestTimeout:
             awaitable.close()
             raise TimeoutError
 
-        monkeypatch.setattr(
-            "bounty_agent.scanners.nuclei.asyncio.wait_for", fast_wait_for
-        )
+        monkeypatch.setattr("bounty_agent.scanners.nuclei.asyncio.wait_for", fast_wait_for)
 
         scanner = NucleiScanner(NucleiConfig(timeout_seconds=1))
         with pytest.raises(NucleiTimeoutError):
@@ -148,9 +146,7 @@ class TestTimeout:
         assert fake._killed
 
         # Restore for any subsequent test in the same module.
-        monkeypatch.setattr(
-            "bounty_agent.scanners.nuclei.asyncio.wait_for", original_wait_for
-        )
+        monkeypatch.setattr("bounty_agent.scanners.nuclei.asyncio.wait_for", original_wait_for)
 
 
 class TestCommandBuilder:

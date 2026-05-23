@@ -40,9 +40,7 @@ async def test_returns_endpoints_with_success_status(
 async def test_filters_out_of_scope_paths(
     respx_mock: respx.MockRouter,
 ) -> None:
-    scope = ScopePolicy.from_iterables(
-        ["allowed.example"], path_denylist=["/admin"]
-    )
+    scope = ScopePolicy.from_iterables(["allowed.example"], path_denylist=["/admin"])
     respx_mock.get(host="allowed.example").mock(return_value=httpx.Response(200))
 
     async with httpx.AsyncClient() as client:

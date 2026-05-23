@@ -336,25 +336,25 @@ class BountyAgent:
                      BUG BOUNTY REPORT
 ============================================================
 
-TARGET: {results['target']}
-TIMESTAMP: {results['timestamp']}
+TARGET: {results["target"]}
+TIMESTAMP: {results["timestamp"]}
 
 ------------------------------------------------------------
 
 SUMARIO
-  - Endpoints encontrados: {len(results['endpoints'])}
-  - Nuclei findings: {len(results['nuclei_findings'])}
-  - Fuzzing findings: {len(results['fuzzing_findings'])}
+  - Endpoints encontrados: {len(results["endpoints"])}
+  - Nuclei findings: {len(results["nuclei_findings"])}
+  - Fuzzing findings: {len(results["fuzzing_findings"])}
 
 ------------------------------------------------------------
 
 WAF DETECTION
-  - Detectados: {', '.join(results['waf_detection'].get('detected', ['Nenhum']))}
-  - Protegido: {'Sim' if results['waf_detection'].get('likely_protected') else 'Nao'}
+  - Detectados: {", ".join(results["waf_detection"].get("detected", ["Nenhum"]))}
+  - Protegido: {"Sim" if results["waf_detection"].get("likely_protected") else "Nao"}
 
 ------------------------------------------------------------
 
-NUCLEI FINDINGS ({len(results['nuclei_findings'])})
+NUCLEI FINDINGS ({len(results["nuclei_findings"])})
 """
 
         if results["nuclei_findings"]:

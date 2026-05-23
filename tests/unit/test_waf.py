@@ -87,9 +87,7 @@ class TestDetectFromResponse:
         assert "Cloudflare" in detection.detected_vendors
 
     def test_custom_signature_is_honoured(self) -> None:
-        custom = (
-            WafSignature(vendor="Custom", header_names=("x-custom-shield",)),
-        )
+        custom = (WafSignature(vendor="Custom", header_names=("x-custom-shield",)),)
         response = _make_response(headers={"x-custom-shield": "yes"})
         detection = detect_from_response(response, signatures=custom)
         assert detection.detected_vendors == ["Custom"]
@@ -118,9 +116,7 @@ class TestDetectAsync:
         self,
         respx_mock: respx.MockRouter,
     ) -> None:
-        respx_mock.get("https://allowed.example/").mock(
-            side_effect=httpx.ConnectError("boom")
-        )
+        respx_mock.get("https://allowed.example/").mock(side_effect=httpx.ConnectError("boom"))
         scope = ScopePolicy.from_iterables(["allowed.example"])
         async with httpx.AsyncClient() as client:
             detection = await detect_async(client, "https://allowed.example/", scope=scope)

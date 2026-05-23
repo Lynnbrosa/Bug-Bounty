@@ -71,9 +71,7 @@ class TestRoundTrip:
 
 
 class TestListing:
-    def test_list_for_target_returns_newest_first(
-        self, repo: ScanRepository
-    ) -> None:
+    def test_list_for_target_returns_newest_first(self, repo: ScanRepository) -> None:
         first = _result(finding_titles=("A",))
         second = _result(finding_titles=("B",))
         repo.save(first)
@@ -81,9 +79,7 @@ class TestListing:
         scans = repo.list_for_target("https://example.com/")
         assert [s.scan_id for s in scans] == [second.scan_id, first.scan_id]
 
-    def test_list_for_target_respects_limit(
-        self, repo: ScanRepository
-    ) -> None:
+    def test_list_for_target_respects_limit(self, repo: ScanRepository) -> None:
         for i in range(5):
             repo.save(_result(finding_titles=(f"T{i}",)))
         assert len(repo.list_for_target("https://example.com/", limit=3)) == 3
@@ -112,20 +108,14 @@ class TestDiff:
         assert baseline.scan_id == first.scan_id
         assert current.scan_id == second.scan_id
 
-    def test_latest_two_returns_none_with_one_scan(
-        self, repo: ScanRepository
-    ) -> None:
+    def test_latest_two_returns_none_with_one_scan(self, repo: ScanRepository) -> None:
         repo.save(_result(finding_titles=("only",)))
         assert repo.latest_two_for_target("https://example.com/") is None
 
 
 class TestMissing:
-    def test_get_returns_none_for_unknown_scan(
-        self, repo: ScanRepository
-    ) -> None:
+    def test_get_returns_none_for_unknown_scan(self, repo: ScanRepository) -> None:
         assert repo.get("00000000-0000-0000-0000-000000000000") is None
 
-    def test_list_for_unknown_target_returns_empty(
-        self, repo: ScanRepository
-    ) -> None:
+    def test_list_for_unknown_target_returns_empty(self, repo: ScanRepository) -> None:
         assert repo.list_for_target("https://unknown.example/") == []

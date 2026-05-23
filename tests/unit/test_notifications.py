@@ -31,9 +31,7 @@ def _result(severity: Severity) -> ScanResult:
 
 
 async def test_no_post_when_no_high_severity(respx_mock: respx.MockRouter) -> None:
-    route = respx_mock.post("https://example.invalid/hook").mock(
-        return_value=httpx.Response(200)
-    )
+    route = respx_mock.post("https://example.invalid/hook").mock(return_value=httpx.Response(200))
     notifier = WebhookNotifier(webhook_url="https://example.invalid/hook")
     sent = await notifier.notify(_result(Severity.LOW))
     assert sent is False
@@ -41,9 +39,7 @@ async def test_no_post_when_no_high_severity(respx_mock: respx.MockRouter) -> No
 
 
 async def test_posts_payload_for_high_severity(respx_mock: respx.MockRouter) -> None:
-    route = respx_mock.post("https://example.invalid/hook").mock(
-        return_value=httpx.Response(200)
-    )
+    route = respx_mock.post("https://example.invalid/hook").mock(return_value=httpx.Response(200))
     notifier = WebhookNotifier(webhook_url="https://example.invalid/hook")
     sent = await notifier.notify(_result(Severity.CRITICAL))
     assert sent is True
@@ -53,9 +49,7 @@ async def test_posts_payload_for_high_severity(respx_mock: respx.MockRouter) -> 
 
 
 async def test_network_error_returns_false(respx_mock: respx.MockRouter) -> None:
-    respx_mock.post("https://example.invalid/hook").mock(
-        side_effect=httpx.ConnectError("boom")
-    )
+    respx_mock.post("https://example.invalid/hook").mock(side_effect=httpx.ConnectError("boom"))
     notifier = WebhookNotifier(webhook_url="https://example.invalid/hook")
     sent = await notifier.notify(_result(Severity.HIGH))
     assert sent is False

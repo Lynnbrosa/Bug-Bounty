@@ -31,9 +31,7 @@ def _response(
 class TestSqlInjectionAnalyzer:
     def test_detects_mysql_error(self) -> None:
         analyzer = SqlInjectionAnalyzer()
-        response = _response(
-            text="You have an error in your SQL syntax; check the manual."
-        )
+        response = _response(text="You have an error in your SQL syntax; check the manual.")
         finding = analyzer.analyze(
             "https://example.com/?q=test",
             payload="' OR '1'='1",
@@ -62,9 +60,7 @@ class TestReflectedXssAnalyzer:
         """JSON responses are unlikely to render as HTML; skip them."""
         analyzer = ReflectedXssAnalyzer()
         payload = "<script>x</script>"
-        response = _response(
-            text=f'{{"echo": "{payload}"}}', content_type="application/json"
-        )
+        response = _response(text=f'{{"echo": "{payload}"}}', content_type="application/json")
         finding = analyzer.analyze("https://example.com/", payload, response)
         assert finding is None
 
@@ -90,9 +86,7 @@ class TestPathTraversalAnalyzer:
     def test_detects_win_ini_marker(self) -> None:
         analyzer = PathTraversalAnalyzer()
         response = _response(text="; for 16-bit app support\n[fonts]\n", content_type="text/plain")
-        finding = analyzer.analyze(
-            "https://example.com/?file=../win.ini", "../win.ini", response
-        )
+        finding = analyzer.analyze("https://example.com/?file=../win.ini", "../win.ini", response)
         assert finding is not None
 
     def test_no_marker_returns_none(self) -> None:
@@ -111,9 +105,7 @@ class TestStatusDeltaAnalyzer:
         analyzer = StatusDeltaAnalyzer()
         response = _response(status_code=200)
         baseline = _response(status_code=200)
-        assert (
-            analyzer.analyze("https://example.com/", "p", response, baseline=baseline) is None
-        )
+        assert analyzer.analyze("https://example.com/", "p", response, baseline=baseline) is None
 
     def test_status_jump_to_error_flags(self) -> None:
         analyzer = StatusDeltaAnalyzer()

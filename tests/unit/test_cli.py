@@ -32,9 +32,7 @@ def test_scan_without_authorized_refuses() -> None:
     assert "Refusing to scan" in (result.stdout + result.stderr)
 
 
-def test_scan_with_empty_allowlist_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scan_with_empty_allowlist_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "config.yaml"
     config.write_text("scope:\n  allowlist: []\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -54,14 +52,10 @@ def test_schema_command_prints_versioned_schema() -> None:
     assert payload["$id"].endswith(".json")
 
 
-def test_init_config_writes_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_init_config_writes_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     destination = tmp_path / "my-config.yaml"
-    result = runner.invoke(
-        app, ["init-config", "--destination", str(destination)]
-    )
+    result = runner.invoke(app, ["init-config", "--destination", str(destination)])
     assert result.exit_code == 0, result.stdout + result.stderr
     assert destination.exists()
     content = destination.read_text(encoding="utf-8")
@@ -74,38 +68,28 @@ def test_init_config_refuses_to_overwrite_without_force(
     monkeypatch.chdir(tmp_path)
     destination = tmp_path / "my-config.yaml"
     destination.write_text("existing", encoding="utf-8")
-    result = runner.invoke(
-        app, ["init-config", "--destination", str(destination)]
-    )
+    result = runner.invoke(app, ["init-config", "--destination", str(destination)])
     assert result.exit_code == 2
     assert destination.read_text(encoding="utf-8") == "existing"
 
 
-def test_audit_missing_log_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_audit_missing_log_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "config.yaml"
-    config.write_text(
-        "logging:\n  audit_log_path: \"missing.log\"\n", encoding="utf-8"
-    )
+    config.write_text('logging:\n  audit_log_path: "missing.log"\n', encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["audit", "--config", str(config)])
     assert result.exit_code == 2
     assert "not found" in (result.stdout + result.stderr)
 
 
-def test_audit_reads_log_lines(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_audit_reads_log_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audit_log = tmp_path / "logs" / "audit.log"
     audit_log.parent.mkdir(parents=True)
     audit_log.write_text(
         '{"event":"scan.started","target":"https://e.example/"}\n', encoding="utf-8"
     )
     config = tmp_path / "config.yaml"
-    config.write_text(
-        f'logging:\n  audit_log_path: "{audit_log.as_posix()}"\n', encoding="utf-8"
-    )
+    config.write_text(f'logging:\n  audit_log_path: "{audit_log.as_posix()}"\n', encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["audit", "--config", str(config), "--tail", "5"])
     assert result.exit_code == 0

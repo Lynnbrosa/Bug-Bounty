@@ -10,9 +10,7 @@ from bounty_agent.fuzzing import PayloadRegistry
 
 
 def test_from_mapping_normalises_keys() -> None:
-    registry = PayloadRegistry.from_mapping(
-        {"SQL_Injection": ["a", "b"], "xss": ("c",)}
-    )
+    registry = PayloadRegistry.from_mapping({"SQL_Injection": ["a", "b"], "xss": ("c",)})
     assert set(registry.categories()) == {"sql_injection", "xss"}
     assert registry.get("sql_injection") == ("a", "b")
     assert registry.get("XSS") == ("c",)
@@ -29,13 +27,7 @@ def test_unknown_category_returns_empty_tuple() -> None:
 
 
 def test_from_yaml_loads_defaults(tmp_path: Path) -> None:
-    yaml_text = (
-        "sql_injection:\n"
-        "  - \"' OR '1'='1\"\n"
-        "  - admin' --\n"
-        "xss:\n"
-        "  - <script>x</script>\n"
-    )
+    yaml_text = "sql_injection:\n  - \"' OR '1'='1\"\n  - admin' --\nxss:\n  - <script>x</script>\n"
     path = tmp_path / "payloads.yaml"
     path.write_text(yaml_text, encoding="utf-8")
 

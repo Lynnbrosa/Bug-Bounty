@@ -32,9 +32,7 @@ class FindingRow(Base):
     __tablename__ = "findings"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    scan_id: Mapped[str] = mapped_column(
-        ForeignKey("scans.id", ondelete="CASCADE"), index=True
-    )
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
     url: Mapped[str] = mapped_column(String(2048))
     source: Mapped[str] = mapped_column(String(32))
     severity: Mapped[str] = mapped_column(String(16), index=True)

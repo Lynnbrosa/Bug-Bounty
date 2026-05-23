@@ -152,9 +152,7 @@ def scan_command(
     if config.persistence.enabled:
         repo = _build_repository(config)
         repo.save(result)
-        console.print(
-            f"[dim]scan persisted to {config.persistence.sqlite_path}[/dim]"
-        )
+        console.print(f"[dim]scan persisted to {config.persistence.sqlite_path}[/dim]")
 
 
 def _print_summary(result: object) -> None:
@@ -230,9 +228,7 @@ def init_config_command(
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
     console.print(f"[green]Wrote[/green] {destination}")
-    console.print(
-        "Now edit [bold]scope.allowlist[/bold] to add at least one authorised host."
-    )
+    console.print("Now edit [bold]scope.allowlist[/bold] to add at least one authorised host.")
 
 
 @app.command("schema")
@@ -286,9 +282,7 @@ app.add_typer(history_app)
 def history_list(
     target: Annotated[str, typer.Argument(help="Target URL to look up.")],
     limit: Annotated[int, typer.Option("--limit", "-n")] = 10,
-    config_path: Annotated[
-        Path | None, typer.Option("--config", "-c")
-    ] = None,
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
 ) -> None:
     """List recent scans for a target."""
     config = load_config(config_path)
@@ -316,9 +310,7 @@ def history_list(
 @history_app.command("diff")
 def history_diff(
     target: Annotated[str, typer.Argument(help="Target URL to diff.")],
-    config_path: Annotated[
-        Path | None, typer.Option("--config", "-c")
-    ] = None,
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
 ) -> None:
     """Diff the two most recent scans for a target."""
     config = load_config(config_path)

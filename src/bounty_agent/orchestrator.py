@@ -125,9 +125,7 @@ class BountyAgent:
             nuclei_findings, nuclei_errors = await self._run_nuclei(target, scan_id)
             result = self._with_findings(result, nuclei_findings)
             if nuclei_errors:
-                result = result.model_copy(
-                    update={"errors": list(result.errors) + nuclei_errors}
-                )
+                result = result.model_copy(update={"errors": list(result.errors) + nuclei_errors})
 
         finished_at = _utcnow()
         result = result.model_copy(update={"finished_at": finished_at})
