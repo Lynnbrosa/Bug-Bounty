@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: build the Go toolchain binaries used by bounty-agent
 # -----------------------------------------------------------------------------
-FROM golang:1.24-bookworm AS gobuild
+FROM golang:1.25-bookworm AS gobuild
 
 ENV GOPATH=/go \
     PATH=/go/bin:$PATH \
