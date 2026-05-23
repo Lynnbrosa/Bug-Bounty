@@ -100,6 +100,9 @@ async def test_orchestrator_runs_waf_fuzz_and_nuclei(
     assert result.authorization is not None
     assert "Cloudflare" in result.waf_detection.detected_vendors
     assert any(f.title.startswith("Possible SQL injection") for f in result.findings)
+    # No tools are installed in the test environment, so the recon
+    # pipeline falls back to the original target as the only endpoint.
+    assert [str(u) for u in result.endpoints] == ["https://allowed.example/"]
     # Nuclei stub was invoked exactly once with the right target.
     assert stub_nuclei.calls == ["https://allowed.example/"]
 

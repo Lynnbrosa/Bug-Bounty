@@ -37,16 +37,19 @@ from bounty_agent.fuzzing import (
     ResponsibleFuzzer,
 )
 from bounty_agent.logging_setup import audit, bind_scan_context, get_logger
+from bounty_agent.recon.pipeline import ReconResult, run_recon_pipeline
 from bounty_agent.recon.waf import detect_async as detect_waf_async
 from bounty_agent.scanners import (
     NucleiNotInstalledError,
     NucleiScanner,
     NucleiTimeoutError,
 )
+from bounty_agent.tools import ToolRegistry
 
 if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
+    from uuid import UUID
 
 
 logger = get_logger(__name__)
@@ -63,6 +66,8 @@ class BountyAgent:
         fuzzer: ResponsibleFuzzer | None = None,
         nuclei: NucleiScanner | None = None,
         scope: ScopePolicy | None = None,
+        tool_registry: ToolRegistry | None = None,
+        intrusive_ok: bool = False,
     ) -> None:
         self.config = config
         self.scope = scope or config.scope.as_policy()
@@ -75,6 +80,8 @@ class BountyAgent:
         self.nuclei = nuclei or NucleiScanner(
             config=config.nuclei.as_nuclei_config(), scope=self.scope
         )
+        self.tool_registry = tool_registry or ToolRegistry()
+        self.intrusive_ok = intrusive_ok
 
     async def scan(
         self,
@@ -107,6 +114,21 @@ class BountyAgent:
             target_context=target_context or TargetContext(),
         )
 
+        # External recon pipeline first, so WAF/fuzz/nuclei work against
+        # the URLs actually discovered (not just the raw target).
+        recon = await self._run_recon(target, scan_id)
+        result = result.model_copy(
+            update={
+                "endpoints": recon.urls or [target],
+                "findings": list(result.findings) + recon.findings,
+                "errors": list(result.errors) + recon.errors,
+            }
+        )
+
+        # Use the alive URLs as fuzz/nuclei targets, falling back to the
+        # original target if recon produced nothing.
+        scan_targets = recon.urls or [target]
+
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(self.config.agent.request_timeout_seconds),
             follow_redirects=True,
@@ -118,11 +140,11 @@ class BountyAgent:
                 detection = result.waf_detection
 
             if self.config.fuzzing.enabled:
-                fuzz_findings = await self._run_fuzzing(client, target, scan_id)
+                fuzz_findings = await self._run_fuzzing_many(client, scan_targets, scan_id)
                 result = self._with_findings(result, fuzz_findings)
 
         if self.config.nuclei.enabled:
-            nuclei_findings, nuclei_errors = await self._run_nuclei(target, scan_id)
+            nuclei_findings, nuclei_errors = await self._run_nuclei_many(scan_targets, scan_id)
             result = self._with_findings(result, nuclei_findings)
             if nuclei_errors:
                 result = result.model_copy(update={"errors": list(result.errors) + nuclei_errors})
@@ -137,6 +159,40 @@ class BountyAgent:
             errors=len(result.errors),
         )
         return result
+
+    async def _run_recon(
+        self,
+        target: str,
+        scan_id: UUID,
+    ) -> ReconResult:
+        try:
+            return await run_recon_pipeline(
+                target=target,
+                config=self.config,
+                scope=self.scope,
+                registry=self.tool_registry,
+                scan_id=scan_id,
+                intrusive_ok=self.intrusive_ok,
+            )
+        except ScopeViolation:
+            raise
+        except Exception as exc:
+            logger.warning("recon.pipeline_failed", error=str(exc))
+            return ReconResult(errors=[f"recon pipeline failed: {exc}"])
+
+    async def _run_fuzzing_many(
+        self,
+        client: httpx.AsyncClient,
+        targets: list[str],
+        scan_id: object,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        # Bound the fuzzing surface so a large recon output does not
+        # explode the run time.
+        bounded = targets[: self.config.fuzzing.max_endpoints]
+        for url in bounded:
+            findings.extend(await self._run_fuzzing(client, url, scan_id))
+        return findings
 
     async def _run_fuzzing(
         self,
@@ -161,6 +217,21 @@ class BountyAgent:
                 continue
             findings.extend(category_findings)
         return findings
+
+    async def _run_nuclei_many(
+        self,
+        targets: list[str],
+        scan_id: object,
+    ) -> tuple[list[Finding], list[str]]:
+        all_findings: list[Finding] = []
+        all_errors: list[str] = []
+        # Same bound as fuzzing: keep run time predictable.
+        bounded = targets[: self.config.fuzzing.max_endpoints]
+        for url in bounded:
+            findings, errors = await self._run_nuclei(url, scan_id)
+            all_findings.extend(findings)
+            all_errors.extend(errors)
+        return all_findings, all_errors
 
     async def _run_nuclei(
         self,

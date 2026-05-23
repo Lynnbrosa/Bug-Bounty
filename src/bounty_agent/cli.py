@@ -109,6 +109,13 @@ def scan_command(
             help="Directory for raw JSON output (overrides reporting.output_dir).",
         ),
     ] = None,
+    intrusive_ok: Annotated[
+        bool,
+        typer.Option(
+            "--intrusive",
+            help="Allow intrusive tools (katana, naabu) in the recon pipeline.",
+        ),
+    ] = False,
 ) -> None:
     """Run a modular scan."""
     _confirm_authorisation(authorized)
@@ -122,6 +129,7 @@ def scan_command(
         target=target,
         program=config.authorization.program,
         config_path=str(config_path) if config_path else None,
+        intrusive=intrusive_ok,
     )
 
     if not config.scope.allowlist:
@@ -132,7 +140,11 @@ def scan_command(
         raise typer.Exit(code=3)
 
     payload_registry = default_payload_registry(config)
-    agent = BountyAgent(config=config, payload_registry=payload_registry)
+    agent = BountyAgent(
+        config=config,
+        payload_registry=payload_registry,
+        intrusive_ok=intrusive_ok,
+    )
 
     try:
         result = asyncio.run(agent.scan(target))
