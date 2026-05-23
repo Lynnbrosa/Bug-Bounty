@@ -27,6 +27,11 @@ from bounty_agent.config import load_config
 from bounty_agent.core import ScopeViolation, render_scan_result_json_schema
 from bounty_agent.logging_setup import audit, configure_logging
 from bounty_agent.orchestrator import BountyAgent, default_payload_registry
+from bounty_agent.persistence import (
+    ScanRepository,
+    make_engine,
+    make_session_factory,
+)
 
 app = typer.Typer(
     name="bounty-agent",
@@ -147,6 +152,13 @@ def scan_command(
     )
     console.print(f"\n[dim]raw JSON written to {json_path}[/dim]")
 
+    if config.persistence.enabled:
+        repo = _build_repository(config)
+        repo.save(result)
+        console.print(
+            f"[dim]scan persisted to {config.persistence.sqlite_path}[/dim]"
+        )
+
 
 def _print_summary(result: object) -> None:
     """Render a Rich table summarising the scan."""
@@ -258,6 +270,78 @@ def audit_command(
             console.print_json(json.dumps(json.loads(line)))
         except json.JSONDecodeError:
             console.print(line)
+
+
+def _build_repository(config: object) -> ScanRepository:
+    from bounty_agent.config import Config
+
+    assert isinstance(config, Config)
+    engine = make_engine(config.persistence.sqlite_path)
+    factory = make_session_factory(engine)
+    return ScanRepository(factory)
+
+
+history_app = typer.Typer(name="history", help="Inspect scan history.", no_args_is_help=True)
+app.add_typer(history_app)
+
+
+@history_app.command("list")
+def history_list(
+    target: Annotated[str, typer.Argument(help="Target URL to look up.")],
+    limit: Annotated[int, typer.Option("--limit", "-n")] = 10,
+    config_path: Annotated[
+        Path | None, typer.Option("--config", "-c")
+    ] = None,
+) -> None:
+    """List recent scans for a target."""
+    config = load_config(config_path)
+    if not config.persistence.enabled:
+        err_console.print("persistence is disabled in the config")
+        raise typer.Exit(code=2)
+    repo = _build_repository(config)
+    scans = repo.list_for_target(target, limit=limit)
+    if not scans:
+        console.print(f"no scans found for {target}")
+        return
+    table = Table(title=f"History for {target}")
+    table.add_column("scan_id")
+    table.add_column("started")
+    table.add_column("findings")
+    for scan in scans:
+        table.add_row(
+            str(scan.scan_id),
+            scan.started_at.isoformat(),
+            str(len(scan.findings)),
+        )
+    console.print(table)
+
+
+@history_app.command("diff")
+def history_diff(
+    target: Annotated[str, typer.Argument(help="Target URL to diff.")],
+    config_path: Annotated[
+        Path | None, typer.Option("--config", "-c")
+    ] = None,
+) -> None:
+    """Diff the two most recent scans for a target."""
+    config = load_config(config_path)
+    if not config.persistence.enabled:
+        err_console.print("persistence is disabled in the config")
+        raise typer.Exit(code=2)
+    repo = _build_repository(config)
+    pair = repo.latest_two_for_target(target)
+    if pair is None:
+        err_console.print(f"need at least two scans for {target}")
+        raise typer.Exit(code=1)
+    baseline, current = pair
+    diff = repo.diff(baseline, current)
+    console.print(f"[bold]Resolved ({len(diff.resolved)}):[/bold]")
+    for finding in diff.resolved:
+        console.print(f"  - {finding.title} ({finding.severity.value})")
+    console.print(f"\n[bold]New ({len(diff.new)}):[/bold]")
+    for finding in diff.new:
+        console.print(f"  + {finding.title} ({finding.severity.value})")
+    console.print(f"\n[dim]Unchanged: {len(diff.unchanged)}[/dim]")
 
 
 def _packaged_default_config() -> Path:
