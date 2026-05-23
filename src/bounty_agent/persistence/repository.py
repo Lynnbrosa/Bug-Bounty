@@ -12,7 +12,7 @@ title plus URL.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -41,6 +41,8 @@ class ScanDiff:
     new: list[Finding]
     resolved: list[Finding]
     unchanged: list[Finding]
+    endpoints_added: list[str] = field(default_factory=list)
+    endpoints_removed: list[str] = field(default_factory=list)
 
 
 class ScanRepository:
@@ -97,7 +99,19 @@ class ScanRepository:
         new = [f for k, f in current_keys.items() if k not in baseline_keys]
         resolved = [f for k, f in baseline_keys.items() if k not in current_keys]
         unchanged = [f for k, f in current_keys.items() if k in baseline_keys]
-        return ScanDiff(new=new, resolved=resolved, unchanged=unchanged)
+
+        baseline_endpoints = {str(u) for u in baseline.endpoints}
+        current_endpoints = {str(u) for u in current.endpoints}
+        endpoints_added = sorted(current_endpoints - baseline_endpoints)
+        endpoints_removed = sorted(baseline_endpoints - current_endpoints)
+
+        return ScanDiff(
+            new=new,
+            resolved=resolved,
+            unchanged=unchanged,
+            endpoints_added=endpoints_added,
+            endpoints_removed=endpoints_removed,
+        )
 
     @staticmethod
     def _to_row(result: ScanResult) -> ScanRow:

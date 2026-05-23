@@ -368,6 +368,16 @@ def history_diff(
         console.print(f"  + {finding.title} ({finding.severity.value})")
     console.print(f"\n[dim]Unchanged: {len(diff.unchanged)}[/dim]")
 
+    if diff.endpoints_added or diff.endpoints_removed:
+        console.print(
+            f"\n[bold]Surface delta:[/bold] +{len(diff.endpoints_added)} / "
+            f"-{len(diff.endpoints_removed)}"
+        )
+        for url in diff.endpoints_added:
+            console.print(f"  [green]+ {url}[/green]")
+        for url in diff.endpoints_removed:
+            console.print(f"  [red]- {url}[/red]")
+
 
 def _packaged_default_config() -> Path:
     """Return the path to the bundled default config in the repo layout."""

@@ -85,6 +85,30 @@ class TestListing:
         assert len(repo.list_for_target("https://example.com/", limit=3)) == 3
 
 
+class TestEndpointDiff:
+    def test_endpoints_added_and_removed(self, repo: ScanRepository) -> None:
+        from bounty_agent.core import (
+            AuthorizationRecord as _Auth,
+        )
+        from bounty_agent.core import (
+            ScanResult as _SR,
+        )
+
+        baseline = _SR(
+            target="https://example.com/",
+            authorization=_Auth(acknowledged=True),
+            endpoints=["https://example.com/", "https://example.com/api"],  # type: ignore[list-item]
+        )
+        current = _SR(
+            target="https://example.com/",
+            authorization=_Auth(acknowledged=True),
+            endpoints=["https://example.com/api", "https://example.com/v2"],  # type: ignore[list-item]
+        )
+        diff = repo.diff(baseline, current)
+        assert diff.endpoints_added == ["https://example.com/v2"]
+        assert diff.endpoints_removed == ["https://example.com/"]
+
+
 class TestDiff:
     def test_new_resolved_unchanged_partitions(self, repo: ScanRepository) -> None:
         baseline = _result(finding_titles=("kept", "resolved-only"))
