@@ -9,13 +9,18 @@ ENV GOPATH=/go \
     PATH=/go/bin:$PATH \
     CGO_ENABLED=0
 
-RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
-    go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
-    go install github.com/projectdiscovery/httpx/cmd/httpx@latest && \
-    go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest && \
-    go install github.com/projectdiscovery/katana/cmd/katana@latest && \
-    go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
-    go install github.com/tomnomnom/waybackurls@latest
+# Each tool gets its own layer so the Docker cache can survive a
+# single failure and so a build error names exactly which binary
+# could not be installed. `naabu` is intentionally excluded: it
+# depends on libpcap (CGO), would require apt installs in both the
+# build and runtime stages, and is an intrusive opt-in tool. Users
+# who need it can `go install` it on the host.
+RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+RUN go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+RUN go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
+RUN go install github.com/projectdiscovery/katana/cmd/katana@latest
+RUN go install github.com/tomnomnom/waybackurls@latest
 
 
 # -----------------------------------------------------------------------------
@@ -50,7 +55,6 @@ COPY --from=gobuild /go/bin/subfinder /usr/local/bin/subfinder
 COPY --from=gobuild /go/bin/httpx /usr/local/bin/httpx
 COPY --from=gobuild /go/bin/dnsx /usr/local/bin/dnsx
 COPY --from=gobuild /go/bin/katana /usr/local/bin/katana
-COPY --from=gobuild /go/bin/naabu /usr/local/bin/naabu
 COPY --from=gobuild /go/bin/waybackurls /usr/local/bin/waybackurls
 
 COPY --from=pybuild /wheels/*.whl /tmp/
