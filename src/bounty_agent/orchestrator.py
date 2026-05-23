@@ -87,7 +87,14 @@ class BountyAgent:
         self,
         target: str,
         target_context: TargetContext | None = None,
+        preset_targets: list[str] | None = None,
     ) -> ScanResult:
+        """Run a full scan.
+
+        ``preset_targets`` skips the recon pipeline and feeds the
+        supplied URLs straight to fuzzing and nuclei. Every URL is
+        still validated against the scope policy first.
+        """
         scan_id = uuid4()
         bind_scan_context(scan_id, target)
 
@@ -114,20 +121,42 @@ class BountyAgent:
             target_context=target_context or TargetContext(),
         )
 
-        # External recon pipeline first, so WAF/fuzz/nuclei work against
-        # the URLs actually discovered (not just the raw target).
-        recon = await self._run_recon(target, scan_id)
-        result = result.model_copy(
-            update={
-                "endpoints": recon.urls or [target],
-                "findings": list(result.findings) + recon.findings,
-                "errors": list(result.errors) + recon.errors,
-            }
-        )
-
-        # Use the alive URLs as fuzz/nuclei targets, falling back to the
-        # original target if recon produced nothing.
-        scan_targets = recon.urls or [target]
+        if preset_targets:
+            # Bypass recon entirely. Validate each URL against scope.
+            validated: list[str] = []
+            errors: list[str] = []
+            for url in preset_targets:
+                try:
+                    self.scope.check(url)
+                except ScopeViolation as exc:
+                    errors.append(f"out of scope: {exc.url}")
+                    continue
+                validated.append(url)
+            scan_targets = validated or [target]
+            result = result.model_copy(
+                update={
+                    "endpoints": scan_targets,
+                    "errors": list(result.errors) + errors,
+                }
+            )
+            audit(
+                "scan.preset_targets",
+                scan_id=str(scan_id),
+                accepted=len(validated),
+                rejected=len(errors),
+            )
+        else:
+            # External recon pipeline first, so WAF/fuzz/nuclei work
+            # against the URLs actually discovered.
+            recon = await self._run_recon(target, scan_id)
+            result = result.model_copy(
+                update={
+                    "endpoints": recon.urls or [target],
+                    "findings": list(result.findings) + recon.findings,
+                    "errors": list(result.errors) + recon.errors,
+                }
+            )
+            scan_targets = recon.urls or [target]
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(self.config.agent.request_timeout_seconds),

@@ -117,6 +117,14 @@ def scan_command(
             help="Allow intrusive tools (katana, naabu) in the recon pipeline.",
         ),
     ] = False,
+    targets_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--targets-file",
+            "-T",
+            help="Skip recon and scan the URLs listed in this file (one per line).",
+        ),
+    ] = None,
 ) -> None:
     """Run a modular scan."""
     _confirm_authorisation(authorized)
@@ -147,8 +155,22 @@ def scan_command(
         intrusive_ok=intrusive_ok,
     )
 
+    preset_targets: list[str] | None = None
+    if targets_file is not None:
+        if not targets_file.exists():
+            err_console.print(f"[bold red]Targets file not found:[/bold red] {targets_file}")
+            raise typer.Exit(code=2)
+        preset_targets = [
+            line.strip()
+            for line in targets_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        if not preset_targets:
+            err_console.print("[bold red]Targets file is empty.[/bold red] Add at least one URL.")
+            raise typer.Exit(code=2)
+
     try:
-        result = asyncio.run(agent.scan(target))
+        result = asyncio.run(agent.scan(target, preset_targets=preset_targets))
     except ScopeViolation as exc:
         err_console.print(f"[bold red]Scope violation:[/bold red] {exc}")
         raise typer.Exit(code=4) from exc

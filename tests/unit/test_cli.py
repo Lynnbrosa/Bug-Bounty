@@ -82,6 +82,48 @@ def test_audit_missing_log_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert "not found" in (result.stdout + result.stderr)
 
 
+def test_scan_targets_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("scope:\n  allowlist: [example.com]\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "scan",
+            "https://example.com/",
+            "--config",
+            str(config),
+            "--authorized",
+            "--targets-file",
+            str(tmp_path / "missing.txt"),
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Targets file not found" in (result.stdout + result.stderr)
+
+
+def test_scan_targets_file_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = tmp_path / "config.yaml"
+    config.write_text("scope:\n  allowlist: [example.com]\n", encoding="utf-8")
+    empty = tmp_path / "urls.txt"
+    empty.write_text("# only comments\n\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "scan",
+            "https://example.com/",
+            "--config",
+            str(config),
+            "--authorized",
+            "--targets-file",
+            str(empty),
+        ],
+    )
+    assert result.exit_code == 2
+    assert "empty" in (result.stdout + result.stderr).lower()
+
+
 def test_recon_refuses_without_authorized() -> None:
     result = runner.invoke(app, ["recon", "https://example.com/"])
     assert result.exit_code == 2

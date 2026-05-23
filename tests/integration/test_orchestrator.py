@@ -120,3 +120,40 @@ async def test_orchestrator_refuses_out_of_scope(
     )
     with pytest.raises(ScopeViolation):
         await agent.scan("https://denied.example/")
+
+
+async def test_orchestrator_uses_preset_targets(
+    respx_mock: respx.MockRouter,
+    config: Config,
+    payloads: PayloadRegistry,
+) -> None:
+    """preset_targets should bypass recon and feed URLs straight to fuzz/nuclei."""
+    respx_mock.get(host="allowed.example").mock(
+        return_value=httpx.Response(200, text="ok", headers={"content-type": "text/html"})
+    )
+
+    stub_nuclei = _StubNuclei()
+    scope = ScopePolicy.from_iterables(["allowed.example"])
+    agent = BountyAgent(
+        config=config,
+        payload_registry=payloads,
+        scope=scope,
+        nuclei=stub_nuclei,
+    )
+
+    presets = [
+        "https://allowed.example/api/v1",
+        "https://allowed.example/login",
+        "https://denied.example/should-be-rejected",
+    ]
+    result = await agent.scan("https://allowed.example/", preset_targets=presets)
+
+    accepted = {str(u) for u in result.endpoints}
+    assert "https://allowed.example/api/v1" in accepted
+    assert "https://allowed.example/login" in accepted
+    assert "https://denied.example/should-be-rejected" not in accepted
+    assert any("out of scope" in err for err in result.errors)
+    # Nuclei was called for each accepted preset target.
+    assert sorted(stub_nuclei.calls) == sorted(
+        ["https://allowed.example/api/v1", "https://allowed.example/login"]
+    )
