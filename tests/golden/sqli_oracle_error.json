@@ -1,0 +1,13 @@
+{
+  "id": "sqli-oracle-error",
+  "description": "Oracle ORA-00933 error.",
+  "category": "sql_injection",
+  "url": "https://example.com/report?id=1",
+  "payload": "1' UNION SELECT NULL--",
+  "response": {
+    "status_code": 500,
+    "headers": {"content-type": "text/html"},
+    "body": "ORA-00933: SQL command not properly ended"
+  },
+  "expected": "tp"
+}

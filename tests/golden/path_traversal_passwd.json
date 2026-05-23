@@ -1,0 +1,13 @@
+{
+  "id": "path-traversal-passwd",
+  "description": "/etc/passwd leak through traversal payload.",
+  "category": "path_traversal",
+  "url": "https://example.com/static?file=../etc/passwd",
+  "payload": "../etc/passwd",
+  "response": {
+    "status_code": 200,
+    "headers": {"content-type": "text/plain"},
+    "body": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"
+  },
+  "expected": "tp"
+}

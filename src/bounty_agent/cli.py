@@ -25,6 +25,8 @@ from rich.table import Table
 from bounty_agent import __version__, legacy
 from bounty_agent.config import load_config
 from bounty_agent.core import ScopeViolation, render_scan_result_json_schema
+from bounty_agent.eval import evaluate as eval_run
+from bounty_agent.eval import load_cases as eval_load_cases
 from bounty_agent.logging_setup import audit, configure_logging
 from bounty_agent.orchestrator import BountyAgent, default_payload_registry
 from bounty_agent.persistence import (
@@ -404,6 +406,64 @@ def _packaged_default_config() -> Path:
     if not candidate.exists():
         raise FileNotFoundError(f"packaged default config not found at {candidate}")
     return candidate
+
+
+@app.command("eval")
+def eval_command(
+    dataset_dir: Annotated[
+        Path | None,
+        typer.Option("--dataset", "-d", help="Directory of golden cases."),
+    ] = None,
+) -> None:
+    """Run the analyzers against the golden dataset and print metrics."""
+    directory = dataset_dir or _default_dataset_dir()
+    if not directory.exists():
+        err_console.print(f"[bold red]Dataset not found:[/bold red] {directory}")
+        raise typer.Exit(code=2)
+    cases = eval_load_cases(directory)
+    report = eval_run(cases)
+
+    table = Table(title=f"Golden eval ({len(cases)} cases)")
+    table.add_column("Category")
+    table.add_column("TP")
+    table.add_column("FP")
+    table.add_column("FN")
+    table.add_column("Precision")
+    table.add_column("Recall")
+    table.add_column("F1")
+    for category, metrics in sorted(report.per_category.items()):
+        table.add_row(
+            category,
+            str(metrics.true_positive),
+            str(metrics.false_positive),
+            str(metrics.false_negative),
+            f"{metrics.precision:.2f}",
+            f"{metrics.recall:.2f}",
+            f"{metrics.f1:.2f}",
+        )
+    overall = report.overall
+    table.add_row(
+        "OVERALL",
+        str(overall.true_positive),
+        str(overall.false_positive),
+        str(overall.false_negative),
+        f"{overall.precision:.2f}",
+        f"{overall.recall:.2f}",
+        f"{overall.f1:.2f}",
+    )
+    console.print(table)
+
+    if report.failures:
+        console.print("\n[bold yellow]Failures:[/bold yellow]")
+        for failure in report.failures:
+            console.print(f"  - {failure}")
+        raise typer.Exit(code=1)
+
+
+def _default_dataset_dir() -> Path:
+    here = Path(__file__).resolve()
+    repo_root = here.parents[2]
+    return repo_root / "tests" / "golden"
 
 
 @app.command("recon")

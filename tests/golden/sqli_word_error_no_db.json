@@ -1,0 +1,13 @@
+{
+  "id": "sqli-word-error-no-db",
+  "description": "Body says 'error' but does not look like a DB stack trace.",
+  "category": "sql_injection",
+  "url": "https://example.com/api/search?q=test",
+  "payload": "' OR '1'='1",
+  "response": {
+    "status_code": 400,
+    "headers": {"content-type": "application/json"},
+    "body": "{\"error\": \"Bad request: q must be alphanumeric\"}"
+  },
+  "expected": "fp"
+}

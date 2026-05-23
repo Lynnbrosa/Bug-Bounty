@@ -1,0 +1,13 @@
+{
+  "id": "xss-reflected-html",
+  "description": "Payload reflected verbatim into HTML body.",
+  "category": "xss",
+  "url": "https://example.com/comment?text=hello",
+  "payload": "<script>bounty-agent-probe</script>",
+  "response": {
+    "status_code": 200,
+    "headers": {"content-type": "text/html; charset=utf-8"},
+    "body": "<html><body>Thanks for: <script>bounty-agent-probe</script></body></html>"
+  },
+  "expected": "tp"
+}

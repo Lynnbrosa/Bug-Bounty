@@ -1,0 +1,13 @@
+{
+  "id": "xss-json-reflection",
+  "description": "Reflection in JSON response is not exploitable as XSS; analyzer should skip.",
+  "category": "xss",
+  "url": "https://example.com/api/echo?msg=hi",
+  "payload": "<script>bounty-agent-probe</script>",
+  "response": {
+    "status_code": 200,
+    "headers": {"content-type": "application/json"},
+    "body": "{\"echo\": \"<script>bounty-agent-probe</script>\"}"
+  },
+  "expected": "fp"
+}

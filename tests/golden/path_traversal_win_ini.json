@@ -1,0 +1,13 @@
+{
+  "id": "path-traversal-win-ini",
+  "description": "Windows win.ini leak through traversal payload.",
+  "category": "path_traversal",
+  "url": "https://example.com/static?file=..\\..\\windows\\win.ini",
+  "payload": "..\\..\\windows\\win.ini",
+  "response": {
+    "status_code": 200,
+    "headers": {"content-type": "text/plain"},
+    "body": "; for 16-bit app support\n[fonts]\n[extensions]\n"
+  },
+  "expected": "tp"
+}

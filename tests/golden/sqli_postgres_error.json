@@ -1,0 +1,13 @@
+{
+  "id": "sqli-postgres-error",
+  "description": "PostgreSQL psql: error fragment.",
+  "category": "sql_injection",
+  "url": "https://example.com/items?id=1",
+  "payload": "1 OR 1=1",
+  "response": {
+    "status_code": 500,
+    "headers": {"content-type": "text/html"},
+    "body": "<pre>psql: error: ERROR: invalid input syntax for type integer</pre>"
+  },
+  "expected": "tp"
+}
