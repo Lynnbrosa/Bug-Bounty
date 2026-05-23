@@ -1,0 +1,89 @@
+# Bug Bounty Scan Report
+
+- **Target:** {{ result.target }}
+- **Scan ID:** `{{ result.scan_id }}`
+- **Started:** {{ result.started_at.isoformat() }}
+{% if result.finished_at -%}
+- **Finished:** {{ result.finished_at.isoformat() }}
+{% endif -%}
+- **Schema version:** {{ result.schema_version }}
+
+## Authorization
+
+- **Program:** {{ result.authorization.program or "_unspecified_" }}
+- **Contact:** {{ result.authorization.contact or "_unspecified_" }}
+- **Acknowledged:** {{ "yes" if result.authorization.acknowledged else "no" }}
+{% if result.authorization.notes %}
+- **Notes:** {{ result.authorization.notes }}
+{% endif %}
+
+## WAF detection
+
+{% if result.waf_detection.error -%}
+WAF detection failed: `{{ result.waf_detection.error }}`
+{% else -%}
+- **Detected vendors:** {{ ", ".join(result.waf_detection.detected_vendors) or "none" }}
+- **Likely protected:** {{ "yes" if result.waf_detection.likely_protected else "no" }}
+- **Status code:** {{ result.waf_detection.status_code or "n/a" }}
+{% endif %}
+
+## Summary
+
+| Severity | Count |
+|----------|-------|
+{% for severity, count in counts.items() -%}
+| {{ severity.value }} | {{ count }} |
+{% endfor %}
+
+{% if result.endpoints -%}
+## Endpoints
+
+{% for endpoint in result.endpoints -%}
+- {{ endpoint }}
+{% endfor %}
+{% endif %}
+
+## Findings
+
+{% if not result.findings -%}
+_No findings reported._
+{% else -%}
+{% for finding in result.findings -%}
+### [{{ finding.severity.value | upper }}] {{ finding.title }}
+
+- **URL:** {{ finding.url }}
+- **Source:** {{ finding.source.value }}
+- **Discovered at:** {{ finding.discovered_at.isoformat() }}
+{% if finding.payload -%}
+- **Payload:** `{{ finding.payload }}`
+{% endif -%}
+{% if finding.contextual_score is not none -%}
+- **Contextual score:** {{ "%.2f" | format(finding.contextual_score) }}
+{% endif %}
+
+{{ finding.description }}
+
+{% if finding.evidence -%}
+**Evidence:**
+
+```json
+{{ finding.evidence | tojson(indent=2) }}
+```
+{% endif %}
+
+---
+
+{% endfor %}
+{% endif %}
+
+{% if result.errors -%}
+## Errors
+
+{% for error in result.errors -%}
+- {{ error }}
+{% endfor %}
+{% endif %}
+
+## Ethics
+
+This scan was executed in authorised scope. Rate limits, scope guard and audit logging were enforced for every request. Follow your program's responsible disclosure policy before publishing any of the findings above.

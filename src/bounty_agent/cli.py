@@ -32,6 +32,7 @@ from bounty_agent.persistence import (
     make_engine,
     make_session_factory,
 )
+from bounty_agent.reporting import write_reports
 
 app = typer.Typer(
     name="bounty-agent",
@@ -144,13 +145,9 @@ def scan_command(
     _print_summary(result)
 
     out_dir = output_dir or Path(config.reporting.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / f"scan-{result.scan_id}.json"
-    json_path.write_text(
-        result.model_dump_json(indent=2),
-        encoding="utf-8",
-    )
-    console.print(f"\n[dim]raw JSON written to {json_path}[/dim]")
+    written = write_reports(result, out_dir, config.reporting.formats)
+    for fmt, path in written.items():
+        console.print(f"[dim]{fmt}: {path}[/dim]")
 
     if config.persistence.enabled:
         repo = _build_repository(config)
