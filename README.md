@@ -71,7 +71,7 @@ Every command that touches a network target requires `--authorized`. Add `--intr
 
 ## Configuration
 
-Configuration is loaded from YAML and may be overridden by environment variables prefixed `BOUNTY_AGENT_` (nested keys use `__` as separator). The shipped `config/default.yaml` documents every field. The fields you will actually edit:
+Configuration is loaded from YAML and may be overridden by environment variables prefixed `BOUNTY_AGENT_` (nested keys use `__` as separator). A `.env` file in the working directory is loaded automatically; copy `.env.example` to `.env` to fill secrets like `ANTHROPIC_API_KEY`. Real shell variables always win over `.env`. The shipped `config/default.yaml` documents every field. The fields you will actually edit:
 
 ```yaml
 authorization:

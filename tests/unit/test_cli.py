@@ -194,6 +194,42 @@ def test_tools_run_refuses_unknown_tool(tmp_path: Path, monkeypatch: pytest.Monk
     assert "unknown tool" in (result.stdout + result.stderr)
 
 
+def test_dotenv_is_loaded_from_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A .env file in the working directory is loaded by the CLI callback."""
+    import os
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "BOUNTY_AGENT_DOTENV_PROBE=loaded\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("BOUNTY_AGENT_DOTENV_PROBE", raising=False)
+
+    # `schema` is a side-effect free subcommand that still triggers the
+    # @app.callback() root, where dotenv loading lives.
+    result = runner.invoke(app, ["schema"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert os.environ.get("BOUNTY_AGENT_DOTENV_PROBE") == "loaded"
+
+
+def test_dotenv_does_not_override_real_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Variables already in the real environment win over .env contents."""
+    import os
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "BOUNTY_AGENT_DOTENV_PROBE=from_file\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BOUNTY_AGENT_DOTENV_PROBE", "from_shell")
+
+    result = runner.invoke(app, ["schema"])
+    assert result.exit_code == 0
+    assert os.environ.get("BOUNTY_AGENT_DOTENV_PROBE") == "from_shell"
+
+
 def test_audit_reads_log_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audit_log = tmp_path / "logs" / "audit.log"
     audit_log.parent.mkdir(parents=True)

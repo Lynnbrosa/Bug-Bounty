@@ -59,6 +59,25 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _load_dotenv_if_present() -> None:
+    """Load environment variables from a .env file in the working dir.
+
+    Looks only at ``./.env`` (no ancestor walk) to keep behaviour
+    predictable when invoked from inside a nested project. Variables
+    already set in the real environment win (override=False), so a
+    one-off ``export ANTHROPIC_API_KEY=...`` still beats whatever the
+    file says. Silent no-op when no .env exists or the dotenv package
+    is missing.
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    env_file = Path.cwd() / ".env"
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file, override=False)
+
+
 @app.callback()
 def _root(
     version: Annotated[
@@ -73,6 +92,7 @@ def _root(
 ) -> None:
     """Responsible bug bounty research agent."""
     _ = version  # consumed by the eager callback
+    _load_dotenv_if_present()
 
 
 def _confirm_authorisation(authorized: bool, banner: bool = True) -> None:
