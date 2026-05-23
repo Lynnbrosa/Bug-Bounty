@@ -1,0 +1,73 @@
+# bounty-agent configuration
+#
+# This file is loaded by pydantic-settings. Every section is optional except
+# `scope.allowlist`, which must list at least one host before any scan runs.
+
+authorization:
+  # Set to true only after you have explicit written authorization for every
+  # host listed in `scope.allowlist`. The CLI also requires --authorized at
+  # invocation time, so this flag alone is not enough to run.
+  acknowledged: false
+  program: ""        # e.g. "HackerOne / acme-corp"
+  contact: ""        # e.g. "secops@acme.example"
+  notes: ""
+
+scope:
+  # Hosts allowed for testing. Wildcards are matched as suffixes:
+  #   "*.example.com" matches "api.example.com" but not "example.com".
+  allowlist: []
+  # Paths to never touch even if the host is allowed.
+  path_denylist:
+    - "/logout"
+    - "/admin/delete"
+    - "/api/v1/users/delete"
+
+agent:
+  min_delay_seconds: 1.0
+  max_delay_seconds: 3.0
+  max_requests_per_minute: 20
+  request_timeout_seconds: 10
+  user_agents_rotate: true
+
+nuclei:
+  enabled: true
+  binary: "nuclei"
+  templates_path: "~/nuclei-templates"
+  severity:
+    - critical
+    - high
+    - medium
+  concurrency: 1
+  rate_limit: 10
+  timeout_seconds: 120
+
+fuzzing:
+  enabled: true
+  max_endpoints: 5
+  payloads_per_param: 5
+  categories:
+    - sql_injection
+    - xss
+    - path_traversal
+
+waf:
+  detect: true
+
+reporting:
+  output_dir: "reports"
+  formats:
+    - text
+    - markdown
+    - json
+
+persistence:
+  enabled: true
+  sqlite_path: "bounty.sqlite"
+
+logging:
+  level: INFO
+  audit_log_path: "logs/audit.log"
+
+notifications:
+  enabled: false
+  webhook_url: ""

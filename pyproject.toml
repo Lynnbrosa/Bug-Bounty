@@ -1,0 +1,129 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bounty-agent"
+version = "0.1.0"
+description = "Responsible bug bounty research agent with scope guards, structured findings and audit logging."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Lynn Bueno Rosa", email = "Cbueno538@yahoo.com" }]
+keywords = ["bug-bounty", "security", "research", "nuclei", "fuzzing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "httpx>=0.27",
+    "tenacity>=8.2",
+    "typer>=0.12",
+    "rich>=13.7",
+    "structlog>=24.1",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "pyyaml>=6.0",
+    "sqlalchemy>=2.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+notifications = ["aiohttp>=3.9"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "respx>=0.21",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+bounty-agent = "bounty_agent.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/Lynnbrosa/Bug-Bounty"
+Issues = "https://github.com/Lynnbrosa/Bug-Bounty/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bounty_agent"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",     # pycodestyle, pyflakes
+    "I",                # isort
+    "B",                # flake8-bugbear
+    "UP",               # pyupgrade
+    "ANN",              # flake8-annotations
+    "ASYNC",            # flake8-async
+    "S",                # flake8-bandit
+    "PL",               # pylint
+    "RUF",              # ruff specific
+]
+ignore = [
+    "ANN101",   # missing self type
+    "ANN102",   # missing cls type
+    "PLR0913",  # too many arguments
+    "S101",     # assert allowed in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ANN", "PLR2004"]
+"src/bounty_agent/legacy.py" = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+show_error_codes = true
+exclude = ["src/bounty_agent/legacy.py", "build/", "dist/"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=bounty_agent",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+markers = [
+    "integration: integration tests that may need external tools",
+    "slow: tests that take more than a couple seconds",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["bounty_agent"]
+omit = ["*/legacy.py", "*/__main__.py"]
+
+[tool.coverage.report]
+exclude_also = [
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
