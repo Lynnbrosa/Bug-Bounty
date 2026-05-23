@@ -62,21 +62,21 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E", "F", "W",     # pycodestyle, pyflakes
+    "E", "F", "W",      # pycodestyle, pyflakes
     "I",                # isort
     "B",                # flake8-bugbear
     "UP",               # pyupgrade
     "ANN",              # flake8-annotations
+    "ARG",              # flake8-unused-arguments
     "ASYNC",            # flake8-async
     "S",                # flake8-bandit
     "PL",               # pylint
     "RUF",              # ruff specific
 ]
 ignore = [
-    "ANN101",   # missing self type
-    "ANN102",   # missing cls type
     "PLR0913",  # too many arguments
     "S101",     # assert allowed in tests
+    "PLC0415",  # import inside function (sometimes needed for optional deps)
 ]
 
 [tool.ruff.lint.per-file-ignores]

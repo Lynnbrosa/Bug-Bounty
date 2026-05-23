@@ -17,7 +17,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from bounty_agent import __version__
+from bounty_agent import __version__, legacy
 
 app = typer.Typer(
     name="bounty-agent",
@@ -38,7 +38,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def _root(
-    version: Annotated[  # noqa: ARG001
+    version: Annotated[
         bool,
         typer.Option(
             "--version",
@@ -49,6 +49,7 @@ def _root(
     ] = False,
 ) -> None:
     """Responsible bug bounty research agent."""
+    _ = version  # consumed by the eager callback
 
 
 @app.command("legacy-scan")
@@ -70,8 +71,6 @@ def legacy_scan(
         )
         raise typer.Exit(code=2)
 
-    from bounty_agent import legacy
-
     try:
         results = asyncio.run(legacy.BountyAgent().analyze_target(target))
     except KeyboardInterrupt:
@@ -84,9 +83,10 @@ def legacy_scan(
 
 @app.command("scan")
 def scan(
-    target: Annotated[str, typer.Argument(help="Authorized target URL.")],  # noqa: ARG001
+    target: Annotated[str, typer.Argument(help="Authorized target URL.")],
 ) -> None:
     """Modular scan command. Not implemented yet, use ``legacy-scan`` for now."""
+    _ = target  # placeholder until the modular path lands
     err_console.print(
         "[yellow]The modular scan command is not implemented yet.[/yellow] "
         "Run [bold]bounty-agent legacy-scan <url> --authorized[/bold] in the meantime."
