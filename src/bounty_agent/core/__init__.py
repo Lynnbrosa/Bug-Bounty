@@ -14,6 +14,7 @@ from bounty_agent.core.schema import (
     render_scan_result_json_schema,
     scan_result_json_schema,
 )
+from bounty_agent.core.scope import ScopeDecision, ScopePolicy, ScopeViolation
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -21,6 +22,9 @@ __all__ = [
     "Finding",
     "FindingSource",
     "ScanResult",
+    "ScopeDecision",
+    "ScopePolicy",
+    "ScopeViolation",
     "Severity",
     "TargetContext",
     "WafDetection",
