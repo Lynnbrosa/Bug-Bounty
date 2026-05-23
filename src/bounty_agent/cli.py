@@ -27,6 +27,7 @@ from bounty_agent.config import load_config
 from bounty_agent.core import ScopeViolation, render_scan_result_json_schema
 from bounty_agent.eval import evaluate as eval_run
 from bounty_agent.eval import load_cases as eval_load_cases
+from bounty_agent.llm import LLMClassifier, LLMConfig, apply_verdict
 from bounty_agent.logging_setup import audit, configure_logging
 from bounty_agent.orchestrator import BountyAgent, default_payload_registry
 from bounty_agent.persistence import (
@@ -406,6 +407,84 @@ def _packaged_default_config() -> Path:
     if not candidate.exists():
         raise FileNotFoundError(f"packaged default config not found at {candidate}")
     return candidate
+
+
+@app.command("llm-classify")
+def llm_classify_command(
+    scan_id: Annotated[str, typer.Argument(help="Scan ID to reclassify.")],
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+    save: Annotated[
+        bool,
+        typer.Option("--save", help="Persist the reclassified scan back to SQLite."),
+    ] = False,
+) -> None:
+    """Reclassify a stored scan's findings through Claude Haiku 4.5."""
+    config = load_config(config_path)
+    if not config.llm.enabled:
+        err_console.print(
+            "[bold red]LLM post-processor is disabled.[/bold red] "
+            "Set llm.enabled=true in your config to use this command."
+        )
+        raise typer.Exit(code=2)
+    if not config.persistence.enabled:
+        err_console.print("[bold red]Persistence is required to load a scan by id.[/bold red]")
+        raise typer.Exit(code=2)
+
+    configure_logging(
+        level=config.logging.level,
+        audit_log_path=config.logging.audit_log_path,
+    )
+
+    repo = _build_repository(config)
+    scan = repo.get(scan_id)
+    if scan is None:
+        err_console.print(f"scan {scan_id} not found")
+        raise typer.Exit(code=2)
+
+    classifier = LLMClassifier(
+        LLMConfig(
+            enabled=True,
+            model=config.llm.model,
+            max_tokens=config.llm.max_tokens,
+            response_excerpt_chars=config.llm.response_excerpt_chars,
+        )
+    )
+
+    table = Table(title=f"LLM classification ({len(scan.findings)} findings)")
+    table.add_column("Title (original)")
+    table.add_column("Verdict")
+    table.add_column("Refined title")
+    table.add_column("Severity")
+    table.add_column("Conf")
+
+    new_findings = []
+    for finding in scan.findings:
+        excerpt = (finding.evidence or {}).get("body_excerpt", "") or ""
+        result = classifier.classify(finding, response_excerpt=str(excerpt))
+        if result is None:
+            new_findings.append(finding)
+            table.add_row(finding.title, "skipped", "-", finding.severity.value, "-")
+            continue
+        verdict = result.verdict
+        if verdict.true_positive:
+            new_findings.append(apply_verdict(finding, verdict))
+        # FP findings are dropped from the saved scan when --save is set.
+        table.add_row(
+            finding.title,
+            "TP" if verdict.true_positive else "FP",
+            verdict.refined_title,
+            verdict.suggested_severity,
+            f"{verdict.confidence:.2f}",
+        )
+
+    console.print(table)
+
+    if save:
+        updated = scan.model_copy(update={"findings": new_findings})
+        repo.save(updated)
+        console.print(
+            f"[green]Saved {len(new_findings)} findings (was {len(scan.findings)})[/green]"
+        )
 
 
 @app.command("eval")

@@ -89,3 +89,13 @@ tools_cache:
   # against public OSINT APIs. Stored alongside scans in the SQLite db.
   enabled: true
   ttl_seconds: 21600  # 6 hours
+
+llm:
+  # Optional Anthropic-API-backed post-processor. When enabled, each
+  # finding can be reclassified by Claude Haiku 4.5 to filter false
+  # positives, refine titles and suggest contextual severity. Requires
+  # ANTHROPIC_API_KEY in the environment. Default off; opt in deliberately.
+  enabled: false
+  model: claude-haiku-4-5
+  max_tokens: 1024
+  response_excerpt_chars: 2000

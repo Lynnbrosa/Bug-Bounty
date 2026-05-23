@@ -34,6 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 notifications = ["aiohttp>=3.9"]
+llm = ["anthropic>=0.40"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

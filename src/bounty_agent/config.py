@@ -142,6 +142,15 @@ class ToolsCacheSettings(_FrozenModel):
     ttl_seconds: int = 21600  # 6 hours
 
 
+class LLMSettings(_FrozenModel):
+    """Optional Anthropic-API-backed post-processor for findings."""
+
+    enabled: bool = False
+    model: str = "claude-haiku-4-5"
+    max_tokens: int = 1024
+    response_excerpt_chars: int = 2000
+
+
 class Config(BaseSettings):
     """Top-level configuration loaded from YAML and environment."""
 
@@ -164,6 +173,7 @@ class Config(BaseSettings):
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
     tools: ToolsSettings = Field(default_factory=ToolsSettings)
     tools_cache: ToolsCacheSettings = Field(default_factory=ToolsCacheSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -225,6 +235,7 @@ __all__ = [
     "AuthorizationConfig",
     "Config",
     "FuzzingSettings",
+    "LLMSettings",
     "LoggingSettings",
     "NotificationsSettings",
     "NucleiSettings",
