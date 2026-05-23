@@ -33,6 +33,7 @@ from bounty_agent.persistence import (
     make_session_factory,
 )
 from bounty_agent.reporting import write_reports
+from bounty_agent.tools import IntrusiveToolBlocked, ToolRegistry
 
 app = typer.Typer(
     name="bounty-agent",
@@ -342,6 +343,79 @@ def _packaged_default_config() -> Path:
     if not candidate.exists():
         raise FileNotFoundError(f"packaged default config not found at {candidate}")
     return candidate
+
+
+tools_app = typer.Typer(name="tools", help="External tool wrappers.", no_args_is_help=True)
+app.add_typer(tools_app)
+
+
+@tools_app.command("list")
+def tools_list() -> None:
+    """List known external tools and whether their binary is installed."""
+    registry = ToolRegistry()
+    table = Table(title="External tools")
+    table.add_column("name")
+    table.add_column("intrusive")
+    table.add_column("available")
+    table.add_column("description")
+    for descriptor in registry.describe():
+        table.add_row(
+            descriptor.name,
+            "yes" if descriptor.intrusive else "no",
+            "yes" if descriptor.available else "no",
+            descriptor.description,
+        )
+    console.print(table)
+
+
+@tools_app.command("run")
+def tools_run(
+    name: Annotated[str, typer.Argument(help="Tool name (see `tools list`).")],
+    target: Annotated[str, typer.Argument(help="Domain or URL to feed the tool.")],
+    config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+    authorized: Annotated[
+        bool,
+        typer.Option(
+            "--authorized",
+            help="Confirms you have explicit authorization for the target.",
+        ),
+    ] = False,
+    intrusive_ok: Annotated[
+        bool,
+        typer.Option(
+            "--intrusive",
+            help="Required for intrusive tools (katana, naabu).",
+        ),
+    ] = False,
+) -> None:
+    """Run a single tool against a target."""
+    _confirm_authorisation(authorized, banner=False)
+    config = load_config(config_path)
+    configure_logging(
+        level=config.logging.level,
+        audit_log_path=config.logging.audit_log_path,
+    )
+    scope = config.scope.as_policy() if config.scope.allowlist else None
+    registry = ToolRegistry()
+    try:
+        result = asyncio.run(registry.run(name, target, scope=scope, intrusive_ok=intrusive_ok))
+    except KeyError as exc:
+        err_console.print(f"unknown tool: {name}")
+        raise typer.Exit(code=2) from exc
+    except IntrusiveToolBlocked as exc:
+        err_console.print(
+            f"[bold red]{exc}[/bold red] "
+            "Re-run with --intrusive once you have confirmed authorization."
+        )
+        raise typer.Exit(code=2) from exc
+
+    if result.skipped:
+        err_console.print(f"[yellow]skipped:[/yellow] {result.skipped_reason}")
+        raise typer.Exit(code=3)
+
+    console.print(f"[bold]{result.tool}[/bold] returned {len(result.items)} item(s):")
+    for item in result.items:
+        console.print(item)
 
 
 if __name__ == "__main__":

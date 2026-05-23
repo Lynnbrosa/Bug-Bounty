@@ -11,7 +11,11 @@ ENV GOPATH=/go \
 
 RUN go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
     go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
-    go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+    go install github.com/projectdiscovery/httpx/cmd/httpx@latest && \
+    go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest && \
+    go install github.com/projectdiscovery/katana/cmd/katana@latest && \
+    go install github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
+    go install github.com/tomnomnom/waybackurls@latest
 
 
 # -----------------------------------------------------------------------------
@@ -44,6 +48,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=gobuild /go/bin/nuclei /usr/local/bin/nuclei
 COPY --from=gobuild /go/bin/subfinder /usr/local/bin/subfinder
 COPY --from=gobuild /go/bin/httpx /usr/local/bin/httpx
+COPY --from=gobuild /go/bin/dnsx /usr/local/bin/dnsx
+COPY --from=gobuild /go/bin/katana /usr/local/bin/katana
+COPY --from=gobuild /go/bin/naabu /usr/local/bin/naabu
+COPY --from=gobuild /go/bin/waybackurls /usr/local/bin/waybackurls
 
 COPY --from=pybuild /wheels/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -rf /tmp/*.whl

@@ -82,6 +82,26 @@ def test_audit_missing_log_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert "not found" in (result.stdout + result.stderr)
 
 
+def test_tools_list_renders_all_known_tools() -> None:
+    result = runner.invoke(app, ["tools", "list"])
+    assert result.exit_code == 0
+    for name in ("subfinder", "waybackurls", "httpx", "dnsx", "katana", "naabu"):
+        assert name in result.stdout
+
+
+def test_tools_run_refuses_without_authorized() -> None:
+    result = runner.invoke(app, ["tools", "run", "subfinder", "example.com"])
+    assert result.exit_code == 2
+    assert "Refusing to scan" in (result.stdout + result.stderr)
+
+
+def test_tools_run_refuses_unknown_tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["tools", "run", "not-a-tool", "example.com", "--authorized"])
+    assert result.exit_code == 2
+    assert "unknown tool" in (result.stdout + result.stderr)
+
+
 def test_audit_reads_log_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audit_log = tmp_path / "logs" / "audit.log"
     audit_log.parent.mkdir(parents=True)

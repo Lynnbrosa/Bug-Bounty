@@ -124,6 +124,17 @@ class NotificationsSettings(_FrozenModel):
     webhook_url: str | None = None
 
 
+class ToolsSettings(_FrozenModel):
+    """Per-tool enable flags. Intrusive tools default off."""
+
+    subfinder: bool = True
+    waybackurls: bool = True
+    httpx: bool = True
+    dnsx: bool = False
+    katana: bool = False
+    naabu: bool = False
+
+
 class Config(BaseSettings):
     """Top-level configuration loaded from YAML and environment."""
 
@@ -144,6 +155,7 @@ class Config(BaseSettings):
     persistence: PersistenceSettings = Field(default_factory=PersistenceSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     notifications: NotificationsSettings = Field(default_factory=NotificationsSettings)
+    tools: ToolsSettings = Field(default_factory=ToolsSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -211,6 +223,7 @@ __all__ = [
     "PersistenceSettings",
     "ReportingSettings",
     "ScopeConfig",
+    "ToolsSettings",
     "WafSettings",
     "load_config",
 ]

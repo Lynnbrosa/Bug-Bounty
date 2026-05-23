@@ -71,3 +71,14 @@ logging:
 notifications:
   enabled: false
   webhook_url: ""
+
+tools:
+  # Passive tools default on. Intrusive tools (dnsx active probing,
+  # katana crawler, naabu port scan) default off and require the CLI
+  # flag --intrusive in addition to --authorized.
+  subfinder: true
+  waybackurls: true
+  httpx: true
+  dnsx: false
+  katana: false
+  naabu: false
