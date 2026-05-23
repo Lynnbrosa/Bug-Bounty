@@ -1,0 +1,33 @@
+id: sensitive-info-disclosure-custom
+info:
+  name: Sensitive Information Disclosure (custom)
+  author: bounty-agent
+  severity: high
+  description: Look for common configuration files that may contain credentials.
+  tags: misconfig,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/web.config"
+      - "{{BaseURL}}/config.php"
+      - "{{BaseURL}}/settings.json"
+      - "{{BaseURL}}/docker-compose.yml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - password
+          - secret
+          - api_key
+          - api-key
+          - token
+          - credentials
+        case-insensitive: true

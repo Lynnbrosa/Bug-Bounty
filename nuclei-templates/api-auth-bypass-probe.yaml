@@ -1,0 +1,34 @@
+id: api-auth-bypass-probe
+info:
+  name: API authentication bypass probe
+  author: bounty-agent
+  severity: high
+  description: |
+    Probe whether common API administrative endpoints return data with
+    an obviously invalid bearer token. A real auth check should refuse
+    the request before any data is returned.
+  tags: api,auth,intrusive
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/settings"
+
+    headers:
+      Authorization: "Bearer bounty-agent-invalid"
+      X-API-Key: "bounty-agent-invalid"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "email"
+        case-insensitive: true

@@ -40,7 +40,5 @@ audit.log.*
 .env
 .env.local
 
-nuclei-templates/
-
 bounty_report.txt
 bounty_findings.json
