@@ -9,9 +9,11 @@ Design rules:
 * Default deny. An empty allowlist means no scan can run.
 * Hostnames are matched case-insensitively. ``*.example.com`` matches
   any subdomain of ``example.com`` but not the apex.
+* The literal ``"*"`` in the allowlist is a global wildcard: every
+  host is allowed. Use deliberately to disable host-level filtering
+  while keeping scheme/shape/path-denylist checks.
 * Paths in the denylist are matched as prefixes. ``/admin`` blocks
   ``/admin`` and ``/admin/anything``.
-* The decision is logged to the audit trail through the caller.
 """
 
 from __future__ import annotations
@@ -66,6 +68,8 @@ class ScopePolicy:
         if not normalized:
             return False
         for pattern in self.allowlist:
+            if pattern == "*":
+                return True
             if pattern.startswith("*."):
                 suffix = pattern[2:]
                 if normalized.endswith("." + suffix):

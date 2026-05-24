@@ -71,6 +71,24 @@ class TestSchemeAndShape:
         assert policy.evaluate("http:///path").denied
 
 
+class TestGlobalWildcard:
+    def test_star_allows_every_host(self) -> None:
+        policy = ScopePolicy.from_iterables(["*"])
+        assert policy.evaluate("https://any.example.com/").allowed
+        assert policy.evaluate("https://goggle.com/").allowed
+        assert policy.evaluate("https://127.0.0.1/").allowed
+
+    def test_star_still_respects_scheme(self) -> None:
+        policy = ScopePolicy.from_iterables(["*"])
+        assert policy.evaluate("ftp://anywhere.example/").denied
+        assert policy.evaluate("file:///etc/passwd").denied
+
+    def test_star_still_respects_path_denylist(self) -> None:
+        policy = ScopePolicy.from_iterables(["*"], path_denylist=["/logout"])
+        assert policy.evaluate("https://anywhere.example/logout").denied
+        assert policy.evaluate("https://anywhere.example/safe").allowed
+
+
 class TestImmutability:
     def test_policy_is_frozen(self) -> None:
         policy = ScopePolicy.from_iterables(["example.com"])
