@@ -97,7 +97,6 @@ async def test_orchestrator_runs_waf_fuzz_and_nuclei(
     result = await agent.scan("https://allowed.example/")
     assert isinstance(result, ScanResult)
     assert result.target.host == "allowed.example"
-    assert result.authorization is not None
     assert "Cloudflare" in result.waf_detection.detected_vendors
     assert any(f.title.startswith("Possible SQL injection") for f in result.findings)
     # No tools are installed in the test environment, so the recon

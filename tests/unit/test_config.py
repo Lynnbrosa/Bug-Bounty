@@ -24,7 +24,7 @@ def test_defaults_load_when_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.chdir(tmp_path)
     config = load_config()
     assert config.scope.allowlist == ()
-    assert config.agent.max_requests_per_minute == 20
+    assert config.agent.max_requests_per_minute == 200
 
 
 def test_yaml_overrides_defaults(tmp_path: Path) -> None:
@@ -76,7 +76,9 @@ def test_repository_default_yaml_is_loadable() -> None:
     config = Config.from_yaml(project_root / "config" / "default.yaml")
     # default.yaml ships with an empty allowlist by design
     assert config.scope.allowlist == ()
-    assert config.authorization.acknowledged is False
+    # All tools default on after Phase 23.
+    assert config.tools.subfinder is True
+    assert config.tools.katana is True
 
 
 def test_invalid_yaml_raises(tmp_path: Path) -> None:

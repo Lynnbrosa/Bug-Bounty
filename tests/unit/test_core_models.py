@@ -9,7 +9,6 @@ from pydantic import ValidationError
 
 from bounty_agent.core import (
     SCHEMA_VERSION,
-    AuthorizationRecord,
     Finding,
     FindingSource,
     ScanResult,
@@ -90,14 +89,8 @@ class TestFinding:
 
 
 class TestScanResult:
-    def _authorization(self) -> AuthorizationRecord:
-        return AuthorizationRecord(acknowledged=True, program="HackerOne / acme")
-
     def test_defaults(self) -> None:
-        result = ScanResult(
-            target="https://example.com/",
-            authorization=self._authorization(),
-        )
+        result = ScanResult(target="https://example.com/")
         assert result.schema_version == SCHEMA_VERSION
         assert result.findings == []
         assert isinstance(result.started_at, datetime)
@@ -107,7 +100,6 @@ class TestScanResult:
     def test_counts_by_severity(self) -> None:
         result = ScanResult(
             target="https://example.com/",
-            authorization=self._authorization(),
             findings=[
                 _make_finding(Severity.HIGH),
                 _make_finding(Severity.HIGH),
@@ -128,7 +120,6 @@ class TestScanResult:
         )
         result = ScanResult(
             target="https://example.com/",
-            authorization=self._authorization(),
             findings=[nuclei, _make_finding()],
         )
         assert result.findings_by_source(FindingSource.NUCLEI) == [nuclei]

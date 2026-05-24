@@ -26,19 +26,13 @@ def test_no_args_shows_help() -> None:
     assert "legacy-scan" in result.stdout
 
 
-def test_scan_without_authorized_refuses() -> None:
-    result = runner.invoke(app, ["scan", "https://example.com/"])
-    assert result.exit_code == 2
-    assert "Refusing to scan" in (result.stdout + result.stderr)
-
-
 def test_scan_with_empty_allowlist_refuses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "config.yaml"
     config.write_text("scope:\n  allowlist: []\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(
         app,
-        ["scan", "https://example.com/", "--config", str(config), "--authorized"],
+        ["scan", "https://example.com/", "--config", str(config)],
     )
     assert result.exit_code == 3
     assert "allowlist is empty" in (result.stdout + result.stderr)
@@ -93,7 +87,6 @@ def test_scan_targets_file_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPat
             "https://example.com/",
             "--config",
             str(config),
-            "--authorized",
             "--targets-file",
             str(tmp_path / "missing.txt"),
         ],
@@ -115,7 +108,6 @@ def test_scan_targets_file_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             "https://example.com/",
             "--config",
             str(config),
-            "--authorized",
             "--targets-file",
             str(empty),
         ],
@@ -124,19 +116,13 @@ def test_scan_targets_file_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "empty" in (result.stdout + result.stderr).lower()
 
 
-def test_recon_refuses_without_authorized() -> None:
-    result = runner.invoke(app, ["recon", "https://example.com/"])
-    assert result.exit_code == 2
-    assert "Refusing to scan" in (result.stdout + result.stderr)
-
-
 def test_recon_refuses_empty_allowlist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = tmp_path / "config.yaml"
     config.write_text("scope:\n  allowlist: []\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(
         app,
-        ["recon", "https://example.com/", "--config", str(config), "--authorized"],
+        ["recon", "https://example.com/", "--config", str(config)],
     )
     assert result.exit_code == 3
     assert "allowlist is empty" in (result.stdout + result.stderr)
@@ -161,7 +147,6 @@ def test_recon_runs_and_writes_output(tmp_path: Path, monkeypatch: pytest.Monkey
             "https://example.com/",
             "--config",
             str(config),
-            "--authorized",
             "--output",
             str(output),
         ],
@@ -181,15 +166,9 @@ def test_tools_list_renders_all_known_tools() -> None:
         assert name in result.stdout
 
 
-def test_tools_run_refuses_without_authorized() -> None:
-    result = runner.invoke(app, ["tools", "run", "subfinder", "example.com"])
-    assert result.exit_code == 2
-    assert "Refusing to scan" in (result.stdout + result.stderr)
-
-
 def test_tools_run_refuses_unknown_tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    result = runner.invoke(app, ["tools", "run", "not-a-tool", "example.com", "--authorized"])
+    result = runner.invoke(app, ["tools", "run", "not-a-tool", "example.com"])
     assert result.exit_code == 2
     assert "unknown tool" in (result.stdout + result.stderr)
 

@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from bounty_agent.core import (
-    AuthorizationRecord,
     Finding,
     FindingSource,
     ScanResult,
@@ -27,10 +26,6 @@ def repo(tmp_path: Path) -> ScanRepository:
     return ScanRepository(factory)
 
 
-def _authorization() -> AuthorizationRecord:
-    return AuthorizationRecord(acknowledged=True, program="acme")
-
-
 def _result(
     *,
     target: str = "https://example.com/",
@@ -47,7 +42,6 @@ def _result(
     ]
     return ScanResult(
         target=target,  # type: ignore[arg-type]
-        authorization=_authorization(),
         findings=findings,
     )
 
@@ -88,20 +82,15 @@ class TestListing:
 class TestEndpointDiff:
     def test_endpoints_added_and_removed(self, repo: ScanRepository) -> None:
         from bounty_agent.core import (
-            AuthorizationRecord as _Auth,
-        )
-        from bounty_agent.core import (
             ScanResult as _SR,
         )
 
         baseline = _SR(
             target="https://example.com/",
-            authorization=_Auth(acknowledged=True),
             endpoints=["https://example.com/", "https://example.com/api"],  # type: ignore[list-item]
         )
         current = _SR(
             target="https://example.com/",
-            authorization=_Auth(acknowledged=True),
             endpoints=["https://example.com/api", "https://example.com/v2"],  # type: ignore[list-item]
         )
         diff = repo.diff(baseline, current)

@@ -119,7 +119,7 @@ class ScanRepository:
             id=str(result.scan_id),
             target=str(result.target),
             schema_version=result.schema_version,
-            program=result.authorization.program,
+            program=result.target_context.program,
             started_at=result.started_at,
             finished_at=result.finished_at,
             raw_json=result.model_dump_json(),

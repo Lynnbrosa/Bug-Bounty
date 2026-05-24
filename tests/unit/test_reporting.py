@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from bounty_agent.core import (
-    AuthorizationRecord,
     Finding,
     FindingSource,
     ScanResult,
     Severity,
+    TargetContext,
     WafDetection,
 )
 from bounty_agent.reporting import (
@@ -44,8 +44,8 @@ def result() -> ScanResult:
     ]
     return ScanResult(
         target="https://example.com/",
-        authorization=AuthorizationRecord(
-            acknowledged=True, program="HackerOne / acme", contact="sec@acme.example"
+        target_context=TargetContext(
+            program="HackerOne / acme", contact="sec@acme.example"
         ),
         waf_detection=WafDetection(
             detected_vendors=["Cloudflare"], likely_protected=True, status_code=200
@@ -63,10 +63,7 @@ class TestRenderText:
         assert "[HIGH]" in text
 
     def test_empty_findings_section(self) -> None:
-        result = ScanResult(
-            target="https://example.com/",
-            authorization=AuthorizationRecord(acknowledged=True),
-        )
+        result = ScanResult(target="https://example.com/")
         text = render_text(result)
         assert "No findings reported." in text
 
@@ -98,7 +95,6 @@ class TestRenderMarkdown:
     def test_handles_waf_error(self) -> None:
         result = ScanResult(
             target="https://example.com/",
-            authorization=AuthorizationRecord(acknowledged=True),
             waf_detection=WafDetection(error="connection refused"),
         )
         md = render_markdown(result)

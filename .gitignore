@@ -47,5 +47,12 @@ bounty-agent.yaml
 *.engagement.yaml
 juice.yaml
 
+# Per-scan artifacts (URLs discovered, target lists). Often contain
+# target-specific paths that should not leak.
+recon-result.json
+recon-result-*.json
+targets.txt
+*-targets.txt
+
 bounty_report.txt
 bounty_findings.json

@@ -6,7 +6,6 @@ import httpx
 import respx
 
 from bounty_agent.core import (
-    AuthorizationRecord,
     Finding,
     FindingSource,
     ScanResult,
@@ -18,7 +17,6 @@ from bounty_agent.notifications import WebhookNotifier
 def _result(severity: Severity) -> ScanResult:
     return ScanResult(
         target="https://example.com/",
-        authorization=AuthorizationRecord(acknowledged=True),
         findings=[
             Finding(
                 url="https://example.com/",

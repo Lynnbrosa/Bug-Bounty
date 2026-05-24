@@ -24,7 +24,6 @@ import httpx
 
 from bounty_agent.config import Config
 from bounty_agent.core import (
-    AuthorizationRecord,
     Finding,
     ScanResult,
     ScopePolicy,
@@ -68,7 +67,6 @@ class BountyAgent:
         nuclei: NucleiScanner | None = None,
         scope: ScopePolicy | None = None,
         tool_registry: ToolRegistry | None = None,
-        intrusive_ok: bool = False,
         tool_cache: ToolCache | None = None,
     ) -> None:
         self.config = config
@@ -83,7 +81,6 @@ class BountyAgent:
             config=config.nuclei.as_nuclei_config(), scope=self.scope
         )
         self.tool_registry = tool_registry or ToolRegistry()
-        self.intrusive_ok = intrusive_ok
         self.tool_cache = tool_cache or NoopToolCache()
 
     async def scan(
@@ -101,17 +98,12 @@ class BountyAgent:
         scan_id = uuid4()
         bind_scan_context(scan_id, target)
 
-        authorization = AuthorizationRecord(
-            acknowledged=self.config.authorization.acknowledged,
-            program=self.config.authorization.program,
-            contact=self.config.authorization.contact,
-            notes=self.config.authorization.notes,
-        )
+        ctx = target_context or TargetContext()
         audit(
             "scan.started",
             scan_id=str(scan_id),
             target=target,
-            program=authorization.program,
+            program=ctx.program,
         )
 
         # Refuse early if the URL is not in scope.
@@ -120,8 +112,7 @@ class BountyAgent:
         result = ScanResult(
             scan_id=scan_id,
             target=target,  # type: ignore[arg-type]
-            authorization=authorization,
-            target_context=target_context or TargetContext(),
+            target_context=ctx,
         )
 
         if preset_targets:
@@ -204,7 +195,7 @@ class BountyAgent:
                 scope=self.scope,
                 registry=self.tool_registry,
                 scan_id=scan_id,
-                intrusive_ok=self.intrusive_ok,
+                intrusive_ok=True,
                 cache=self.tool_cache,
             )
         except ScopeViolation:
@@ -293,11 +284,21 @@ def _utcnow() -> datetime:
 
 
 def default_payload_registry(config: Config, project_root: Path | None = None) -> PayloadRegistry:
-    """Load the packaged payloads.yaml, scoped to the configured categories."""
+    """Load the payloads YAML scoped to the configured categories.
+
+    Honours ``config.fuzzing.payloads_file`` if set (opt-in aggressive
+    payloads); otherwise falls back to ``config/payloads.yaml``.
+    """
     from pathlib import Path
 
     root = project_root or Path.cwd()
-    yaml_path = root / "config" / "payloads.yaml"
+    if config.fuzzing.payloads_file:
+        yaml_path = Path(config.fuzzing.payloads_file)
+        if not yaml_path.is_absolute():
+            yaml_path = root / yaml_path
+    else:
+        yaml_path = root / "config" / "payloads.yaml"
+
     if not yaml_path.exists():
         return PayloadRegistry.from_mapping({})
 

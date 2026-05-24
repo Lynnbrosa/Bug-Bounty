@@ -113,16 +113,6 @@ class TargetContext(StrictModel):
     notes: str | None = None
 
 
-class AuthorizationRecord(StrictModel):
-    """Snapshot of the authorization context at scan start."""
-
-    acknowledged: bool
-    program: str | None = None
-    contact: str | None = None
-    notes: str | None = None
-    recorded_at: datetime = Field(default_factory=_utcnow)
-
-
 class ScanResult(StrictModel):
     """Top-level result envelope for a scan run."""
 
@@ -131,7 +121,6 @@ class ScanResult(StrictModel):
     target: AnyHttpUrl
     started_at: datetime = Field(default_factory=_utcnow)
     finished_at: datetime | None = None
-    authorization: AuthorizationRecord
     target_context: TargetContext = Field(default_factory=TargetContext)
     waf_detection: WafDetection = Field(default_factory=WafDetection)
     endpoints: list[AnyHttpUrl] = Field(default_factory=list)
@@ -150,7 +139,6 @@ class ScanResult(StrictModel):
 
 __all__ = [
     "SCHEMA_VERSION",
-    "AuthorizationRecord",
     "Finding",
     "FindingSource",
     "ScanResult",

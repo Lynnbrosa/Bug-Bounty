@@ -8,15 +8,20 @@
 {% endif -%}
 - **Schema version:** {{ result.schema_version }}
 
-## Authorization
+{% if result.target_context.program or result.target_context.contact -%}
+## Context
 
-- **Program:** {{ result.authorization.program or "_unspecified_" }}
-- **Contact:** {{ result.authorization.contact or "_unspecified_" }}
-- **Acknowledged:** {{ "yes" if result.authorization.acknowledged else "no" }}
-{% if result.authorization.notes %}
-- **Notes:** {{ result.authorization.notes }}
+{% if result.target_context.program -%}
+- **Program:** {{ result.target_context.program }}
+{% endif -%}
+{% if result.target_context.contact -%}
+- **Contact:** {{ result.target_context.contact }}
+{% endif -%}
+{% if result.target_context.notes -%}
+- **Notes:** {{ result.target_context.notes }}
 {% endif %}
 
+{% endif -%}
 ## WAF detection
 
 {% if result.waf_detection.error -%}
@@ -83,7 +88,3 @@ _No findings reported._
 - {{ error }}
 {% endfor %}
 {% endif %}
-
-## Ethics
-
-This scan was executed in authorised scope. Rate limits, scope guard and audit logging were enforced for every request. Follow your program's responsible disclosure policy before publishing any of the findings above.

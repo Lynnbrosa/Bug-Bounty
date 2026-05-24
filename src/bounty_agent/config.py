@@ -37,29 +37,18 @@ class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class AuthorizationConfig(_FrozenModel):
-    acknowledged: bool = False
-    program: str | None = None
-    contact: str | None = None
-    notes: str | None = None
-
-
 class ScopeConfig(_FrozenModel):
     allowlist: tuple[str, ...] = ()
-    path_denylist: tuple[str, ...] = (
-        "/logout",
-        "/admin/delete",
-        "/api/v1/users/delete",
-    )
+    path_denylist: tuple[str, ...] = ()
 
     def as_policy(self) -> ScopePolicy:
         return ScopePolicy.from_iterables(list(self.allowlist), list(self.path_denylist))
 
 
 class AgentConfig(_FrozenModel):
-    min_delay_seconds: float = 1.0
-    max_delay_seconds: float = 3.0
-    max_requests_per_minute: int = 20
+    min_delay_seconds: float = 0.1
+    max_delay_seconds: float = 0.5
+    max_requests_per_minute: int = 200
     request_timeout_seconds: float = 10.0
     user_agents_rotate: bool = True
 
@@ -95,9 +84,11 @@ class NucleiSettings(_FrozenModel):
 
 class FuzzingSettings(_FrozenModel):
     enabled: bool = True
-    max_endpoints: int = 25
+    max_endpoints: int = 100
     payloads_per_param: int = 5
     categories: tuple[str, ...] = ("sql_injection", "xss", "path_traversal")
+    # opt-in path to alternative payloads file (e.g. config/payloads-aggressive.yaml)
+    payloads_file: str | None = None
 
 
 class WafSettings(_FrozenModel):
@@ -116,7 +107,7 @@ class PersistenceSettings(_FrozenModel):
 
 class LoggingSettings(_FrozenModel):
     level: str = "INFO"
-    audit_log_path: str | None = "logs/audit.log"
+    audit_log_path: str | None = None  # opt in by setting a path
 
 
 class NotificationsSettings(_FrozenModel):
@@ -125,14 +116,14 @@ class NotificationsSettings(_FrozenModel):
 
 
 class ToolsSettings(_FrozenModel):
-    """Per-tool enable flags. Intrusive tools default off."""
+    """Per-tool enable flags. All default on."""
 
     subfinder: bool = True
     waybackurls: bool = True
     httpx: bool = True
-    dnsx: bool = False
-    katana: bool = False
-    naabu: bool = False
+    dnsx: bool = True
+    katana: bool = True
+    naabu: bool = True
 
 
 class ToolsCacheSettings(_FrozenModel):
@@ -171,7 +162,6 @@ class Config(BaseSettings):
         frozen=True,
     )
 
-    authorization: AuthorizationConfig = Field(default_factory=AuthorizationConfig)
     scope: ScopeConfig = Field(default_factory=ScopeConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     nuclei: NucleiSettings = Field(default_factory=NucleiSettings)
@@ -242,7 +232,6 @@ def _resolve_default_path() -> Path | None:
 
 __all__ = [
     "AgentConfig",
-    "AuthorizationConfig",
     "Config",
     "FuzzingSettings",
     "LLMSettings",

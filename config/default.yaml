@@ -1,31 +1,20 @@
 # bounty-agent configuration
 #
 # This file is loaded by pydantic-settings. Every section is optional except
-# `scope.allowlist`, which must list at least one host before any scan runs.
-
-authorization:
-  # Set to true only after you have explicit written authorization for every
-  # host listed in `scope.allowlist`. The CLI also requires --authorized at
-  # invocation time, so this flag alone is not enough to run.
-  acknowledged: false
-  program: ""        # e.g. "HackerOne / acme-corp"
-  contact: ""        # e.g. "secops@acme.example"
-  notes: ""
+# `scope.allowlist`, which must list at least one host. Use ["*"] to allow
+# any host (still applies path_denylist and scheme validation).
+#
+# Override individual fields via env vars: BOUNTY_AGENT_<SECTION>__<FIELD>.
+# Example: BOUNTY_AGENT_AGENT__MAX_REQUESTS_PER_MINUTE=500
 
 scope:
-  # Hosts allowed for testing. Wildcards are matched as suffixes:
-  #   "*.example.com" matches "api.example.com" but not "example.com".
-  allowlist: []
-  # Paths to never touch even if the host is allowed.
-  path_denylist:
-    - "/logout"
-    - "/admin/delete"
-    - "/api/v1/users/delete"
+  allowlist: []          # required. ["*"] = any host. Empty = refuse all.
+  path_denylist: []      # optional; URLs whose path starts with any prefix here are skipped
 
 agent:
-  min_delay_seconds: 1.0
-  max_delay_seconds: 3.0
-  max_requests_per_minute: 20
+  min_delay_seconds: 0.1
+  max_delay_seconds: 0.5
+  max_requests_per_minute: 200
   request_timeout_seconds: 10
   user_agents_rotate: true
 
@@ -39,16 +28,17 @@ nuclei:
     - medium
   concurrency: 1
   rate_limit: 10
-  timeout_seconds: 600    # full critical+high catalogue against one host can take 3-5 min
+  timeout_seconds: 600
 
 fuzzing:
   enabled: true
-  max_endpoints: 25      # cap on URLs fuzzed/nuclei'd after recon; raise for wider surface
+  max_endpoints: 100
   payloads_per_param: 5
   categories:
     - sql_injection
     - xss
     - path_traversal
+  # payloads_file: config/payloads-aggressive.yaml   # uncomment to load destructive payloads
 
 waf:
   detect: true
@@ -66,35 +56,25 @@ persistence:
 
 logging:
   level: INFO
-  audit_log_path: "logs/audit.log"
+  audit_log_path: null     # set to a path (e.g. "logs/audit.log") to enable JSONL audit trail
 
 notifications:
   enabled: false
   webhook_url: ""
 
 tools:
-  # Passive tools default on. Intrusive tools (dnsx active probing,
-  # katana crawler, naabu port scan) default off and require the CLI
-  # flag --intrusive in addition to --authorized.
   subfinder: true
   waybackurls: true
   httpx: true
-  dnsx: false
-  katana: false
-  naabu: false
+  dnsx: true
+  katana: true
+  naabu: true
 
 tools_cache:
-  # Cache for passive tools (subfinder, waybackurls). Reuses results
-  # for the same (tool, target) pair for the given TTL to reduce hits
-  # against public OSINT APIs. Stored alongside scans in the SQLite db.
   enabled: true
-  ttl_seconds: 21600  # 6 hours
+  ttl_seconds: 21600
 
 llm:
-  # Optional Anthropic-API-backed post-processor. When enabled, each
-  # finding can be reclassified by Claude Haiku 4.5 to filter false
-  # positives, refine titles and suggest contextual severity. Requires
-  # ANTHROPIC_API_KEY in the environment. Default off; opt in deliberately.
   enabled: false
   model: claude-haiku-4-5
   max_tokens: 1024

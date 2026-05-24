@@ -24,8 +24,11 @@ def render_text(result: ScanResult) -> str:
         lines.append(f"Finished: {result.finished_at.isoformat()}")
     lines.append(_SUB)
 
-    auth = result.authorization
-    lines.append(f"Authorization: program={auth.program or '-'}, contact={auth.contact or '-'}")
+    ctx = result.target_context
+    if ctx.program or ctx.contact:
+        lines.append(
+            f"Context: program={ctx.program or '-'}, contact={ctx.contact or '-'}"
+        )
 
     waf = result.waf_detection
     if waf.error:

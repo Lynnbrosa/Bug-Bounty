@@ -2,7 +2,6 @@
 
 from bounty_agent.core.models import (
     SCHEMA_VERSION,
-    AuthorizationRecord,
     Finding,
     FindingSource,
     ScanResult,
@@ -18,7 +17,6 @@ from bounty_agent.core.scope import ScopeDecision, ScopePolicy, ScopeViolation
 
 __all__ = [
     "SCHEMA_VERSION",
-    "AuthorizationRecord",
     "Finding",
     "FindingSource",
     "ScanResult",

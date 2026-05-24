@@ -44,7 +44,10 @@ from bounty_agent.tools import IntrusiveToolBlocked, ToolRegistry
 
 app = typer.Typer(
     name="bounty-agent",
-    help="Responsible bug bounty research agent. Requires explicit authorization.",
+    help=(
+        "Bug bounty research agent. Scope guard is enforced; "
+        "use scope.allowlist=['*'] to disable host filtering."
+    ),
     no_args_is_help=True,
     add_completion=False,
 )
@@ -95,23 +98,9 @@ def _root(
     _load_dotenv_if_present()
 
 
-def _confirm_authorisation(authorized: bool, banner: bool = True) -> None:
-    if not authorized:
-        err_console.print(
-            "[bold red]Refusing to scan.[/bold red] "
-            "Pass --authorized to confirm you have permission for this target."
-        )
-        raise typer.Exit(code=2)
-    if banner:
-        console.print(
-            "[bold yellow]Authorised scan mode.[/bold yellow] "
-            "Every request will go through the scope guard and be recorded in the audit log."
-        )
-
-
 @app.command("scan")
 def scan_command(
-    target: Annotated[str, typer.Argument(help="Authorized target URL.")],
+    target: Annotated[str, typer.Argument(help="Target URL.")],
     config_path: Annotated[
         Path | None,
         typer.Option(
@@ -121,13 +110,6 @@ def scan_command(
             help="Path to a YAML config (default: config/default.yaml in cwd).",
         ),
     ] = None,
-    authorized: Annotated[
-        bool,
-        typer.Option(
-            "--authorized",
-            help="Confirms you have explicit authorization to test the target.",
-        ),
-    ] = False,
     output_dir: Annotated[
         Path | None,
         typer.Option(
@@ -136,13 +118,6 @@ def scan_command(
             help="Directory for raw JSON output (overrides reporting.output_dir).",
         ),
     ] = None,
-    intrusive_ok: Annotated[
-        bool,
-        typer.Option(
-            "--intrusive",
-            help="Allow intrusive tools (katana, naabu) in the recon pipeline.",
-        ),
-    ] = False,
     targets_file: Annotated[
         Path | None,
         typer.Option(
@@ -153,7 +128,6 @@ def scan_command(
     ] = None,
 ) -> None:
     """Run a modular scan."""
-    _confirm_authorisation(authorized)
     config = load_config(config_path)
     configure_logging(
         level=config.logging.level,
@@ -162,15 +136,13 @@ def scan_command(
     audit(
         "cli.scan.invoked",
         target=target,
-        program=config.authorization.program,
         config_path=str(config_path) if config_path else None,
-        intrusive=intrusive_ok,
     )
 
     if not config.scope.allowlist:
         err_console.print(
             "[bold red]Refusing to scan.[/bold red] "
-            "config.scope.allowlist is empty. Add the target host before running."
+            "config.scope.allowlist is empty. Add at least one host (or '*') before running."
         )
         raise typer.Exit(code=3)
 
@@ -179,7 +151,6 @@ def scan_command(
     agent = BountyAgent(
         config=config,
         payload_registry=payload_registry,
-        intrusive_ok=intrusive_ok,
         tool_cache=tool_cache,
     )
 
@@ -247,17 +218,9 @@ def _print_summary(result: object) -> None:
 
 @app.command("legacy-scan")
 def legacy_scan(
-    target: Annotated[str, typer.Argument(help="Authorized target URL.")],
-    authorized: Annotated[
-        bool,
-        typer.Option(
-            "--authorized",
-            help="Confirms you have explicit authorization to test the target.",
-        ),
-    ] = False,
+    target: Annotated[str, typer.Argument(help="Target URL.")],
 ) -> None:
     """Run the legacy single-file agent."""
-    _confirm_authorisation(authorized, banner=False)
     try:
         results = asyncio.run(legacy.BountyAgent().analyze_target(target))
     except KeyboardInterrupt:
@@ -292,7 +255,7 @@ def init_config_command(
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
     console.print(f"[green]Wrote[/green] {destination}")
-    console.print("Now edit [bold]scope.allowlist[/bold] to add at least one authorised host.")
+    console.print("Now edit [bold]scope.allowlist[/bold] to add hosts (use ['*'] to allow any).")
 
 
 @app.command("schema")
@@ -567,23 +530,14 @@ def _default_dataset_dir() -> Path:
 
 @app.command("recon")
 def recon_command(
-    target: Annotated[str, typer.Argument(help="Authorized target URL or domain.")],
+    target: Annotated[str, typer.Argument(help="Target URL or domain.")],
     config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
-    authorized: Annotated[
-        bool,
-        typer.Option("--authorized", help="Confirms you have explicit authorization."),
-    ] = False,
-    intrusive_ok: Annotated[
-        bool,
-        typer.Option("--intrusive", help="Allow katana, naabu and other intrusive tools."),
-    ] = False,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Write the recon result as JSON to this path."),
     ] = None,
 ) -> None:
     """Run only the external recon pipeline and print discovered surface."""
-    _confirm_authorisation(authorized, banner=False)
     config = load_config(config_path)
     configure_logging(
         level=config.logging.level,
@@ -594,7 +548,7 @@ def recon_command(
         raise typer.Exit(code=3)
 
     scope = config.scope.as_policy()
-    audit("cli.recon.invoked", target=target, intrusive=intrusive_ok)
+    audit("cli.recon.invoked", target=target)
     cache = _build_tool_cache(config)
 
     try:
@@ -603,7 +557,7 @@ def recon_command(
                 target=target,
                 config=config,
                 scope=scope,
-                intrusive_ok=intrusive_ok,
+                intrusive_ok=True,
                 cache=cache,
             )
         )
@@ -674,23 +628,8 @@ def tools_run(
     name: Annotated[str, typer.Argument(help="Tool name (see `tools list`).")],
     target: Annotated[str, typer.Argument(help="Domain or URL to feed the tool.")],
     config_path: Annotated[Path | None, typer.Option("--config", "-c")] = None,
-    authorized: Annotated[
-        bool,
-        typer.Option(
-            "--authorized",
-            help="Confirms you have explicit authorization for the target.",
-        ),
-    ] = False,
-    intrusive_ok: Annotated[
-        bool,
-        typer.Option(
-            "--intrusive",
-            help="Required for intrusive tools (katana, naabu).",
-        ),
-    ] = False,
 ) -> None:
     """Run a single tool against a target."""
-    _confirm_authorisation(authorized, banner=False)
     config = load_config(config_path)
     configure_logging(
         level=config.logging.level,
@@ -699,15 +638,12 @@ def tools_run(
     scope = config.scope.as_policy() if config.scope.allowlist else None
     registry = ToolRegistry()
     try:
-        result = asyncio.run(registry.run(name, target, scope=scope, intrusive_ok=intrusive_ok))
+        result = asyncio.run(registry.run(name, target, scope=scope, intrusive_ok=True))
     except KeyError as exc:
         err_console.print(f"unknown tool: {name}")
         raise typer.Exit(code=2) from exc
     except IntrusiveToolBlocked as exc:
-        err_console.print(
-            f"[bold red]{exc}[/bold red] "
-            "Re-run with --intrusive once you have confirmed authorization."
-        )
+        err_console.print(f"[bold red]{exc}[/bold red]")
         raise typer.Exit(code=2) from exc
 
     if result.skipped:
