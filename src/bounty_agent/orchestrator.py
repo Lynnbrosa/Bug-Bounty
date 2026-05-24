@@ -18,6 +18,7 @@ This is the unit that the CLI ``scan`` command calls.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
 import httpx
@@ -43,6 +44,7 @@ from bounty_agent.scanners import (
     NucleiNotInstalledError,
     NucleiScanner,
     NucleiTimeoutError,
+    SensitivePathScanner,
 )
 from bounty_agent.tools import ToolRegistry
 
@@ -65,6 +67,7 @@ class BountyAgent:
         *,
         fuzzer: ResponsibleFuzzer | None = None,
         nuclei: NucleiScanner | None = None,
+        sensitive: SensitivePathScanner | None = None,
         scope: ScopePolicy | None = None,
         tool_registry: ToolRegistry | None = None,
         tool_cache: ToolCache | None = None,
@@ -79,6 +82,10 @@ class BountyAgent:
         )
         self.nuclei = nuclei or NucleiScanner(
             config=config.nuclei.as_nuclei_config(), scope=self.scope
+        )
+        self.sensitive = sensitive or SensitivePathScanner(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
         )
         self.tool_registry = tool_registry or ToolRegistry()
         self.tool_cache = tool_cache or NoopToolCache()
@@ -166,6 +173,16 @@ class BountyAgent:
                 fuzz_findings = await self._run_fuzzing_many(client, scan_targets, scan_id)
                 result = self._with_findings(result, fuzz_findings)
 
+            # Sensitive-content scan: signature-based, no payloads. Cheap to
+            # run on every endpoint, catches the high-confidence stuff the
+            # fuzzer/nuclei don't see (backup files, /metrics, /ftp/*, env
+            # leaks). Bounded by the same max_endpoints budget as fuzzing.
+            sensitive_targets = scan_targets[: self.config.fuzzing.max_endpoints]
+            sensitive_findings = await self.sensitive.scan(
+                client, sensitive_targets, scan_id=scan_id
+            )
+            result = self._with_findings(result, sensitive_findings)
+
         if self.config.nuclei.enabled:
             nuclei_findings, nuclei_errors = await self._run_nuclei_many(scan_targets, scan_id)
             result = self._with_findings(result, nuclei_findings)
@@ -224,23 +241,87 @@ class BountyAgent:
         target: str,
         scan_id: object,
     ) -> list[Finding]:
+        """Run all fuzzing categories against ``target``.
+
+        Strategy (Phase 24):
+
+        1. Parse the URL's query string. Fuzz every existing param.
+        2. If there are no query params, fuzz a small set of common
+           parameter names (``q``, ``id``, ``search``, ...) so an
+           endpoint like ``/rest/products/search`` still gets touched.
+        3. Always attempt path-segment fuzzing. The fuzzer no-ops when
+           the last segment isn't a numeric ID, so this is safe to call
+           unconditionally and catches IDOR-shaped URLs like
+           ``/api/Users/1``.
+        """
         findings: list[Finding] = []
+        params = self._fuzzable_params(target)
         for category in self.config.fuzzing.categories:
+            for param in params:
+                try:
+                    category_findings = await self.fuzzer.fuzz_endpoint(
+                        client,
+                        target,
+                        param=param,
+                        category=category,
+                        scan_id=scan_id,  # type: ignore[arg-type]
+                    )
+                except ScopeViolation:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "fuzzer.category_failed",
+                        category=category,
+                        param=param,
+                        error=str(exc),
+                    )
+                    continue
+                findings.extend(category_findings)
+
             try:
-                category_findings = await self.fuzzer.fuzz_endpoint(
+                path_findings = await self.fuzzer.fuzz_path_segment(
                     client,
                     target,
-                    param="q",
                     category=category,
                     scan_id=scan_id,  # type: ignore[arg-type]
                 )
             except ScopeViolation:
                 raise
             except Exception as exc:
-                logger.warning("fuzzer.category_failed", category=category, error=str(exc))
-                continue
-            findings.extend(category_findings)
+                logger.warning(
+                    "fuzzer.path_segment_failed",
+                    category=category,
+                    error=str(exc),
+                )
+            else:
+                findings.extend(path_findings)
         return findings
+
+    # Common parameter names tried when the URL has no query string. These
+    # cover the bulk of real-world reflective sinks: search forms, ID
+    # lookups, file-include params, redirect params.
+    _FALLBACK_PARAMS: tuple[str, ...] = (
+        "q",
+        "id",
+        "search",
+        "name",
+        "query",
+        "file",
+        "path",
+        "redirect",
+        "url",
+    )
+
+    def _fuzzable_params(self, url: str) -> tuple[str, ...]:
+        """Return the parameter names we'll inject payloads into.
+
+        Existing query params take priority: if the URL already has
+        ``?q=apple``, fuzzing only ``q`` is what a tester would do. When
+        there are none, fall back to a curated list of common sinks.
+        """
+        parsed = urlparse(url)
+        existing = tuple(name for name, _ in parse_qsl(parsed.query, keep_blank_values=True))
+        return existing or self._FALLBACK_PARAMS
 
     async def _run_nuclei_many(
         self,

@@ -119,3 +119,89 @@ class TestFuzzEndpoint:
                 client, "https://example.com/", "q", "sql_injection"
             )
         assert findings == []
+
+
+class TestInjectPathSegment:
+    def test_replaces_numeric_id(self) -> None:
+        url = ResponsibleFuzzer._inject_path_segment("https://example.com/api/Users/1", "999")
+        assert url == "https://example.com/api/Users/999"
+
+    def test_handles_root_path(self) -> None:
+        url = ResponsibleFuzzer._inject_path_segment("https://example.com/", "x")
+        assert url == "https://example.com/x"
+
+
+class TestLastPathSegmentIsId:
+    def test_numeric_tail_is_id(self) -> None:
+        assert ResponsibleFuzzer._last_path_segment_is_id("https://e.example/api/Users/42")
+
+    def test_trailing_slash_still_works(self) -> None:
+        assert ResponsibleFuzzer._last_path_segment_is_id("https://e.example/api/Users/42/")
+
+    def test_slug_is_not_id(self) -> None:
+        assert not ResponsibleFuzzer._last_path_segment_is_id("https://e.example/api/Users/alice")
+
+    def test_empty_path_is_not_id(self) -> None:
+        assert not ResponsibleFuzzer._last_path_segment_is_id("https://e.example/")
+
+
+class TestFuzzPathSegment:
+    async def test_fuzzes_numeric_tail(
+        self,
+        respx_mock: respx.MockRouter,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        registry = PayloadRegistry.from_mapping({"sql_injection": ["' OR '1'='1"]})
+        scope = ScopePolicy.from_iterables(["allowed.example"])
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=registry,
+            scope=scope,
+            analyzers=(SqlInjectionAnalyzer(),),
+        )
+
+        captured: list[str] = []
+
+        def _responder(request: httpx.Request) -> httpx.Response:
+            captured.append(str(request.url))
+            # The baseline request hits the literal /Users/1; the payload
+            # request replaces "1" with the injected SQL fragment.
+            if request.url.path.endswith("/Users/1"):
+                return httpx.Response(200, text="ok")
+            return httpx.Response(200, text="You have an error in your SQL syntax")
+
+        respx_mock.get(url__startswith="https://allowed.example/api/Users").mock(
+            side_effect=_responder
+        )
+
+        async with httpx.AsyncClient() as client:
+            findings = await fuzzer.fuzz_path_segment(
+                client,
+                "https://allowed.example/api/Users/1",
+                category="sql_injection",
+            )
+
+        # The baseline request goes to /api/Users/1; the payload request
+        # replaces the tail segment.
+        assert any("/api/Users/1" in url for url in captured)
+        assert any("OR" in url and "/api/Users/" in url for url in captured)
+        assert len(findings) == 1
+
+    async def test_skips_non_numeric_tail(
+        self,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        registry = PayloadRegistry.from_mapping({"sql_injection": ["x"]})
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=registry,
+            scope=None,
+            analyzers=(SqlInjectionAnalyzer(),),
+        )
+        async with httpx.AsyncClient() as client:
+            findings = await fuzzer.fuzz_path_segment(
+                client,
+                "https://example.com/api/Users/alice",
+                category="sql_injection",
+            )
+        assert findings == []

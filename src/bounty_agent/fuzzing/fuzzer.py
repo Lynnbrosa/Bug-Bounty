@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -151,6 +152,49 @@ class ResponsibleFuzzer:
         category: str,
         scan_id: UUID | None = None,
     ) -> list[Finding]:
+        """Fuzz a single query parameter on ``url`` with all payloads in ``category``."""
+        return await self._fuzz_with_injector(
+            client=client,
+            url=url,
+            category=category,
+            scan_id=scan_id,
+            location=f"param:{param}",
+            injector=lambda payload: self._inject_param(url, param, payload),
+        )
+
+    async def fuzz_path_segment(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        category: str,
+        scan_id: UUID | None = None,
+    ) -> list[Finding]:
+        """Fuzz the last URL path segment (e.g. ``/api/Users/1`` -> ``/api/Users/<payload>``).
+
+        Returns immediately with an empty list when the last segment is missing
+        or does not look like a numeric ID (the IDOR/path-injection pattern we
+        care about). Use :meth:`fuzz_endpoint` for query-string fuzzing.
+        """
+        if not self._last_path_segment_is_id(url):
+            return []
+        return await self._fuzz_with_injector(
+            client=client,
+            url=url,
+            category=category,
+            scan_id=scan_id,
+            location="path",
+            injector=lambda payload: self._inject_path_segment(url, payload),
+        )
+
+    async def _fuzz_with_injector(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        category: str,
+        scan_id: UUID | None,
+        location: str,
+        injector: Callable[[str], str],
+    ) -> list[Finding]:
         payloads = self.registry.get(category)
         if not payloads:
             logger.info("fuzzer.no_payloads", category=category)
@@ -161,11 +205,21 @@ class ResponsibleFuzzer:
             logger.info("fuzzer.no_analyzer", category=category)
             return []
 
+        audit(
+            "fuzzer.started",
+            scan_id=str(scan_id) if scan_id else None,
+            url=url,
+            category=category,
+            location=location,
+            payloads=len(payloads),
+        )
+        started = time.monotonic()
+
         baseline = await self._safe_request(client, "GET", url)
         findings: list[Finding] = []
 
         for payload in payloads:
-            test_url = self._inject_param(url, param, payload)
+            test_url = injector(payload)
             response = await self._safe_request(client, "GET", test_url)
             if response is None:
                 continue
@@ -179,8 +233,19 @@ class ResponsibleFuzzer:
                     scan_id=str(scan_id) if scan_id else None,
                     url=test_url,
                     category=category,
+                    location=location,
                     severity=finding.severity.value,
                 )
+
+        audit(
+            "fuzzer.finished",
+            scan_id=str(scan_id) if scan_id else None,
+            url=url,
+            category=category,
+            location=location,
+            findings=len(findings),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
         return findings
 
     @staticmethod
@@ -190,6 +255,31 @@ class ResponsibleFuzzer:
         query[param] = payload
         new_query = urlencode(query, safe=":/")
         return urlunparse(parsed._replace(query=new_query))
+
+    @staticmethod
+    def _inject_path_segment(url: str, payload: str) -> str:
+        """Replace the last path segment with ``payload`` (URL-encoded by httpx)."""
+        parsed = urlparse(url)
+        path = parsed.path or "/"
+        if path == "/":
+            new_path = f"/{payload}"
+        else:
+            head, _, _ = path.rpartition("/")
+            new_path = f"{head}/{payload}" if head else f"/{payload}"
+        return urlunparse(parsed._replace(path=new_path))
+
+    @staticmethod
+    def _last_path_segment_is_id(url: str) -> bool:
+        """True when the URL's last path segment is purely numeric.
+
+        Conservative on purpose: we only fuzz the segment when it looks like
+        a numeric primary key, the classic IDOR shape. Slugs and UUIDs are
+        skipped to keep false-positive injection attempts under control.
+        """
+        parsed = urlparse(url)
+        path = parsed.path or ""
+        tail = path.rstrip("/").rsplit("/", 1)[-1]
+        return bool(tail) and tail.isdigit()
 
 
 __all__ = ["FuzzerConfig", "ResponsibleFuzzer"]

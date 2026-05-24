@@ -1,4 +1,4 @@
-"""External scanner wrappers (nuclei)."""
+"""External scanner wrappers (nuclei) and in-process signature scanners."""
 
 from bounty_agent.scanners.nuclei import (
     NucleiConfig,
@@ -9,6 +9,10 @@ from bounty_agent.scanners.nuclei import (
     NucleiTimeoutError,
     parse_nuclei_jsonl,
 )
+from bounty_agent.scanners.sensitive import (
+    SensitivePathScanner,
+    SensitiveSignature,
+)
 
 __all__ = [
     "NucleiConfig",
@@ -17,5 +21,7 @@ __all__ = [
     "NucleiResult",
     "NucleiScanner",
     "NucleiTimeoutError",
+    "SensitivePathScanner",
+    "SensitiveSignature",
     "parse_nuclei_jsonl",
 ]

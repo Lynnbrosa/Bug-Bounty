@@ -51,8 +51,10 @@ juice.yaml
 # target-specific paths that should not leak.
 recon-result.json
 recon-result-*.json
+recon-*.json
 targets.txt
 *-targets.txt
+targets-*.txt
 
 bounty_report.txt
 bounty_findings.json

@@ -40,15 +40,45 @@ _SQL_ERROR_PATTERNS = re.compile(
     r"|".join(
         re.escape(marker)
         for marker in (
+            # MySQL
             "you have an error in your sql syntax",
             "warning: mysql_",
+            "mysql_fetch_array()",
+            "mysqlnd",
+            # MSSQL
             "unclosed quotation mark after the character string",
+            "microsoft odbc",
+            "microsoft sql native",
+            "incorrect syntax near",
+            # PostgreSQL
             "quoted string not properly terminated",
             "psql: error",
+            "syntax error at or near",
+            "pg::syntaxerror",
+            # Oracle
             "ora-00933",
             "ora-01756",
+            "ora-00921",
+            "oracle error",
+            # SQLite (Python wrapper)
             "sqlite3.operationalerror",
+            # SQLite (raw error strings emitted by Node/Better-SQLite3/Sequelize)
+            "sqlite_error:",
+            "sqlite_constraint:",
+            "sequelizedatabaseerror",
+            "sequelizevalidationerror",
+            "sequelizeuniqueconstrainterror",
+            # SQLite via better-sqlite3 / node:sqlite
+            'sqliteerror: near "',
+            "sqliteerror: no such column",
+            # PDO / Doctrine
             "sqlstate[",
+            "doctrine\\dbal",
+            # Generic phrases that strongly imply a DB error surfacing
+            # to the user. Lower precision than specific stack markers,
+            # but useful when wrappers reformat the error string.
+            'syntax error: near "',
+            "unrecognized token:",
         )
     ),
     re.IGNORECASE,
