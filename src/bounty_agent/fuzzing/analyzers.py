@@ -196,6 +196,89 @@ class PathTraversalAnalyzer:
 
 
 @dataclass
+class AuthBypassAnalyzer:
+    """Detects successful authentication bypass via injection.
+
+    Heuristic: when a payload is sent to a login-shaped endpoint and the
+    response status is 2xx with a recognisable auth artifact (JWT, access
+    token, session cookie) in the body, the payload almost certainly
+    bypassed authentication. This catches the "SQLi on email field
+    returns valid JWT" pattern where the standard SqlInjectionAnalyzer
+    sees no error and stays silent.
+
+    The category is shared with ``sql_injection`` so it runs against the
+    same payload set as the SQL analyzer; XSS payloads tend not to
+    trigger auth bypass and are not exercised here.
+    """
+
+    category: str = "sql_injection"
+
+    _AUTH_SUCCESS_STATUS_MAX = 300
+    _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+    _TOKEN_KEY_RE = re.compile(
+        r'"(authentication|token|access_token|jwt|session|sessionId)"\s*:\s*"',
+        re.IGNORECASE,
+    )
+    _LOGIN_PATH_RE = re.compile(
+        r"/(login|signin|sign-in|auth(?:enticate)?|sessions?)\b",
+        re.IGNORECASE,
+    )
+
+    def analyze(
+        self,
+        url: str,
+        payload: str,
+        response: httpx.Response,
+        baseline: httpx.Response | None = None,
+    ) -> Finding | None:
+        # Only run on login-shaped URLs; otherwise too many false positives
+        # (e.g. ordinary search endpoints that return tokenised content).
+        if not self._LOGIN_PATH_RE.search(url):
+            return None
+        if response.status_code >= self._AUTH_SUCCESS_STATUS_MAX:
+            return None
+        # If the baseline ALSO succeeded, the endpoint just accepts
+        # anything; don't claim bypass.
+        if baseline is not None and baseline.status_code < self._AUTH_SUCCESS_STATUS_MAX:
+            body_baseline = _safe_text(baseline)
+            if self._JWT_RE.search(body_baseline) or self._TOKEN_KEY_RE.search(body_baseline):
+                return None
+
+        body = _safe_text(response)
+        jwt_match = self._JWT_RE.search(body)
+        token_match = self._TOKEN_KEY_RE.search(body)
+        if not jwt_match and not token_match:
+            return None
+
+        if jwt_match:
+            marker = jwt_match.group(0)[:40]
+        elif token_match:
+            marker = token_match.group(1)
+        else:
+            marker = ""
+        return Finding(
+            url=url,  # type: ignore[arg-type]
+            source=FindingSource.FUZZING,
+            severity=Severity.CRITICAL,
+            title="Authentication bypass via injection",
+            description=(
+                "An injection payload sent to a login-shaped endpoint "
+                "returned a 2xx with an authentication artifact (JWT, "
+                "access token, session id). The baseline request did "
+                "not authenticate. Strong indicator of an injection-"
+                "based auth bypass; manual confirmation required."
+            ),
+            payload=payload,
+            evidence={
+                "matched_marker": marker,
+                "status_code": response.status_code,
+                "baseline_status_code": baseline.status_code if baseline else None,
+                "has_jwt": bool(jwt_match),
+            },
+        )
+
+
+@dataclass
 class StatusDeltaAnalyzer:
     """Generic last-resort analyzer that flags abrupt status changes.
 
@@ -239,6 +322,7 @@ class StatusDeltaAnalyzer:
 
 DEFAULT_ANALYZERS: tuple[Analyzer, ...] = (
     SqlInjectionAnalyzer(),
+    AuthBypassAnalyzer(),
     ReflectedXssAnalyzer(),
     PathTraversalAnalyzer(),
 )
@@ -254,6 +338,7 @@ def _safe_text(response: httpx.Response) -> str:
 __all__ = [
     "DEFAULT_ANALYZERS",
     "Analyzer",
+    "AuthBypassAnalyzer",
     "PathTraversalAnalyzer",
     "ReflectedXssAnalyzer",
     "SqlInjectionAnalyzer",

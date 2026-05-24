@@ -6,6 +6,7 @@ import httpx
 
 from bounty_agent.core import Severity
 from bounty_agent.fuzzing import (
+    AuthBypassAnalyzer,
     PathTraversalAnalyzer,
     ReflectedXssAnalyzer,
     SqlInjectionAnalyzer,
@@ -93,6 +94,65 @@ class TestPathTraversalAnalyzer:
         analyzer = PathTraversalAnalyzer()
         response = _response(text="not found", status_code=404)
         assert analyzer.analyze("https://example.com/", "../", response) is None
+
+
+_JWT_SAMPLE = (
+    "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9."
+    "eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MX19."
+    "abcdef1234567890abcdef1234567890"
+)
+
+
+class TestAuthBypassAnalyzer:
+    def test_detects_jwt_on_login_path(self) -> None:
+        analyzer = AuthBypassAnalyzer()
+        response = _response(
+            status_code=200,
+            text=f'{{"authentication":{{"token":"{_JWT_SAMPLE}"}}}}',
+            content_type="application/json",
+        )
+        baseline = _response(status_code=401, text='{"error":"invalid credentials"}')
+        finding = analyzer.analyze(
+            "https://example.com/rest/user/login",
+            payload="admin@x'--",
+            response=response,
+            baseline=baseline,
+        )
+        assert finding is not None
+        assert finding.severity == Severity.CRITICAL
+        assert finding.evidence["has_jwt"] is True
+
+    def test_ignores_non_login_path(self) -> None:
+        analyzer = AuthBypassAnalyzer()
+        response = _response(text=f'{{"token":"{_JWT_SAMPLE}"}}')
+        finding = analyzer.analyze(
+            "https://example.com/api/Products",
+            payload="x",
+            response=response,
+        )
+        assert finding is None
+
+    def test_ignores_when_baseline_also_authenticates(self) -> None:
+        analyzer = AuthBypassAnalyzer()
+        response = _response(text=f'{{"token":"{_JWT_SAMPLE}"}}')
+        baseline = _response(text=f'{{"token":"{_JWT_SAMPLE}"}}')
+        finding = analyzer.analyze(
+            "https://example.com/login",
+            payload="x",
+            response=response,
+            baseline=baseline,
+        )
+        assert finding is None
+
+    def test_ignores_4xx_response(self) -> None:
+        analyzer = AuthBypassAnalyzer()
+        response = _response(status_code=401, text=f'{{"token":"{_JWT_SAMPLE}"}}')
+        finding = analyzer.analyze(
+            "https://example.com/login",
+            payload="x",
+            response=response,
+        )
+        assert finding is None
 
 
 class TestStatusDeltaAnalyzer:

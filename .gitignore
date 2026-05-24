@@ -55,6 +55,7 @@ recon-*.json
 targets.txt
 *-targets.txt
 targets-*.txt
+post-targets-*.json
 
 bounty_report.txt
 bounty_findings.json

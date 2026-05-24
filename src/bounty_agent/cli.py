@@ -99,7 +99,7 @@ def _root(
 
 
 @app.command("scan")
-def scan_command(
+def scan_command(  # noqa: PLR0912, PLR0915 - CLI entry point with many options is inherently branchy
     target: Annotated[str, typer.Argument(help="Target URL.")],
     config_path: Annotated[
         Path | None,
@@ -124,6 +124,18 @@ def scan_command(
             "--targets-file",
             "-T",
             help="Skip recon and scan the URLs listed in this file (one per line).",
+        ),
+    ] = None,
+    post_targets_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--post-targets",
+            "-P",
+            help=(
+                "JSON file with POST/PUT/PATCH endpoints to body-fuzz. "
+                "Format: list of {url, method, body, [categories], [headers]}. "
+                "Fields whose body value equals '__FUZZ__' are payload-substituted."
+            ),
         ),
     ] = None,
 ) -> None:
@@ -168,8 +180,32 @@ def scan_command(
             err_console.print("[bold red]Targets file is empty.[/bold red] Add at least one URL.")
             raise typer.Exit(code=2)
 
+    post_targets: list[dict[str, object]] | None = None
+    if post_targets_file is not None:
+        if not post_targets_file.exists():
+            err_console.print(
+                f"[bold red]POST targets file not found:[/bold red] {post_targets_file}"
+            )
+            raise typer.Exit(code=2)
+        try:
+            post_targets = json.loads(post_targets_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            err_console.print(f"[bold red]POST targets file is not valid JSON:[/bold red] {exc}")
+            raise typer.Exit(code=2) from exc
+        if not isinstance(post_targets, list):
+            err_console.print(
+                "[bold red]POST targets file must contain a JSON list "
+                "of {url, method, body, ...} objects.[/bold red]"
+            )
+            raise typer.Exit(code=2)
+        if not post_targets:
+            err_console.print("[bold red]POST targets file is empty.[/bold red]")
+            raise typer.Exit(code=2)
+
     try:
-        result = asyncio.run(agent.scan(target, preset_targets=preset_targets))
+        result = asyncio.run(
+            agent.scan(target, preset_targets=preset_targets, post_targets=post_targets)
+        )
     except ScopeViolation as exc:
         err_console.print(f"[bold red]Scope violation:[/bold red] {exc}")
         raise typer.Exit(code=4) from exc

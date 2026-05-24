@@ -51,6 +51,12 @@ _DEFAULT_USER_AGENTS: tuple[str, ...] = (
 )
 
 
+#: Marker value used in :meth:`ResponsibleFuzzer.fuzz_json_body` templates.
+#: Body fields whose value equals this string are substituted with each
+#: payload. Other fields keep their literal values.
+FUZZ_MARKER = "__FUZZ__"
+
+
 @dataclass(frozen=True)
 class FuzzerConfig:
     """Knobs that control fuzzing behaviour."""
@@ -186,6 +192,101 @@ class ResponsibleFuzzer:
             injector=lambda payload: self._inject_path_segment(url, payload),
         )
 
+    async def fuzz_json_body(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        method: str,
+        body_template: dict[str, object],
+        category: str,
+        scan_id: UUID | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> list[Finding]:
+        """Fuzz JSON body fields on a POST/PUT/PATCH endpoint.
+
+        Every field whose value equals the marker :data:`FUZZ_MARKER`
+        (``"__FUZZ__"``) is replaced with each payload, one at a time.
+        The other fields keep their literal values. The request is sent
+        with ``Content-Type: application/json``.
+
+        Example template for OWASP Juice Shop login::
+
+            {"email": "__FUZZ__", "password": "x"}
+        """
+        markers = [k for k, v in body_template.items() if v == FUZZ_MARKER]
+        if not markers:
+            logger.info("fuzzer.body_template_has_no_marker", url=url)
+            return []
+
+        payloads = self.registry.get(category)
+        if not payloads:
+            return []
+        analyzers_for_category = [a for a in self.analyzers if a.category == category]
+        if not analyzers_for_category:
+            return []
+
+        method_upper = method.upper()
+        location = f"body:{method_upper}:{','.join(markers)}"
+        audit(
+            "fuzzer.started",
+            scan_id=str(scan_id) if scan_id else None,
+            url=url,
+            category=category,
+            location=location,
+            payloads=len(payloads),
+        )
+        started = time.monotonic()
+
+        headers = {"Content-Type": "application/json"}
+        if extra_headers:
+            headers.update(extra_headers)
+
+        # Baseline: replace markers with a safe literal so we have a
+        # reference response to diff against.
+        safe_body = {k: ("baseline" if v == FUZZ_MARKER else v) for k, v in body_template.items()}
+        baseline = await self._safe_request(
+            client, method_upper, url, json=safe_body, headers=headers
+        )
+
+        findings: list[Finding] = []
+        for payload in payloads:
+            for marker_key in markers:
+                test_body = dict(body_template)
+                for k, v in test_body.items():
+                    if v == FUZZ_MARKER:
+                        # Only the active marker gets the payload; the rest
+                        # keep their safe baseline value.
+                        test_body[k] = payload if k == marker_key else "baseline"
+                response = await self._safe_request(
+                    client, method_upper, url, json=test_body, headers=headers
+                )
+                if response is None:
+                    continue
+                for analyzer in analyzers_for_category:
+                    finding = analyzer.analyze(url, payload, response, baseline)
+                    if finding is None:
+                        continue
+                    findings.append(finding)
+                    audit(
+                        "fuzzer.finding",
+                        scan_id=str(scan_id) if scan_id else None,
+                        url=url,
+                        category=category,
+                        location=f"body:{marker_key}",
+                        severity=finding.severity.value,
+                    )
+
+        audit(
+            "fuzzer.finished",
+            scan_id=str(scan_id) if scan_id else None,
+            url=url,
+            category=category,
+            location=location,
+            findings=len(findings),
+            duration_seconds=round(time.monotonic() - started, 3),
+        )
+        return findings
+
     async def _fuzz_with_injector(
         self,
         client: httpx.AsyncClient,
@@ -282,4 +383,4 @@ class ResponsibleFuzzer:
         return bool(tail) and tail.isdigit()
 
 
-__all__ = ["FuzzerConfig", "ResponsibleFuzzer"]
+__all__ = ["FUZZ_MARKER", "FuzzerConfig", "ResponsibleFuzzer"]

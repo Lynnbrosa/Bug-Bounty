@@ -8,6 +8,7 @@ import respx
 
 from bounty_agent.core import ScopePolicy, ScopeViolation
 from bounty_agent.fuzzing import (
+    FUZZ_MARKER,
     FuzzerConfig,
     PayloadRegistry,
     ResponsibleFuzzer,
@@ -202,6 +203,70 @@ class TestFuzzPathSegment:
             findings = await fuzzer.fuzz_path_segment(
                 client,
                 "https://example.com/api/Users/alice",
+                category="sql_injection",
+            )
+        assert findings == []
+
+
+class TestFuzzJsonBody:
+    async def test_substitutes_marker_with_payload(
+        self,
+        respx_mock: respx.MockRouter,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        registry = PayloadRegistry.from_mapping({"sql_injection": ["' OR '1'='1"]})
+        scope = ScopePolicy.from_iterables(["allowed.example"])
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=registry,
+            scope=scope,
+            analyzers=(SqlInjectionAnalyzer(),),
+        )
+
+        bodies: list[dict] = []
+
+        def _responder(request: httpx.Request) -> httpx.Response:
+            import json
+
+            bodies.append(json.loads(request.content))
+            # Return SQL error when the email field contains the payload.
+            if "OR" in bodies[-1].get("email", ""):
+                return httpx.Response(500, text="SQLITE_ERROR: near 'OR': syntax error")
+            return httpx.Response(200, text="ok")
+
+        respx_mock.post("https://allowed.example/login").mock(side_effect=_responder)
+
+        async with httpx.AsyncClient() as client:
+            findings = await fuzzer.fuzz_json_body(
+                client,
+                "https://allowed.example/login",
+                method="POST",
+                body_template={"email": FUZZ_MARKER, "password": "x"},
+                category="sql_injection",
+            )
+        # We expect at least the baseline + 1 payload request.
+        assert len(bodies) >= 2
+        assert any("OR" in b["email"] for b in bodies)
+        # Non-marked fields keep their literal value.
+        assert all(b["password"] == "x" for b in bodies)
+        assert len(findings) == 1
+
+    async def test_no_marker_returns_empty(
+        self,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=PayloadRegistry.from_mapping({"sql_injection": ["x"]}),
+            scope=None,
+            analyzers=(SqlInjectionAnalyzer(),),
+        )
+        async with httpx.AsyncClient() as client:
+            findings = await fuzzer.fuzz_json_body(
+                client,
+                "https://example.com/login",
+                method="POST",
+                body_template={"email": "literal", "password": "literal"},
                 category="sql_injection",
             )
         assert findings == []

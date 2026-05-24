@@ -95,12 +95,19 @@ class BountyAgent:
         target: str,
         target_context: TargetContext | None = None,
         preset_targets: list[str] | None = None,
+        post_targets: list[dict[str, object]] | None = None,
     ) -> ScanResult:
         """Run a full scan.
 
         ``preset_targets`` skips the recon pipeline and feeds the
         supplied URLs straight to fuzzing and nuclei. Every URL is
         still validated against the scope policy first.
+
+        ``post_targets`` is an optional list of POST/PUT/PATCH endpoints
+        with JSON body templates. Each item is a dict with keys
+        ``url``, ``method``, ``body`` (a JSON-shaped dict where fields
+        whose value equals :data:`FUZZ_MARKER` are substituted with
+        payloads). Optional ``categories`` selects fuzzing categories.
         """
         scan_id = uuid4()
         bind_scan_context(scan_id, target)
@@ -173,6 +180,10 @@ class BountyAgent:
                 fuzz_findings = await self._run_fuzzing_many(client, scan_targets, scan_id)
                 result = self._with_findings(result, fuzz_findings)
 
+                if post_targets:
+                    post_findings = await self._run_post_fuzzing(client, post_targets, scan_id)
+                    result = self._with_findings(result, post_findings)
+
             # Sensitive-content scan: signature-based, no payloads. Cheap to
             # run on every endpoint, catches the high-confidence stuff the
             # fuzzer/nuclei don't see (backup files, /metrics, /ftp/*, env
@@ -233,6 +244,74 @@ class BountyAgent:
         bounded = targets[: self.config.fuzzing.max_endpoints]
         for url in bounded:
             findings.extend(await self._run_fuzzing(client, url, scan_id))
+        return findings
+
+    async def _run_post_fuzzing(
+        self,
+        client: httpx.AsyncClient,
+        post_targets: list[dict[str, object]],
+        scan_id: object,
+    ) -> list[Finding]:
+        """Drive :meth:`ResponsibleFuzzer.fuzz_json_body` for each post target.
+
+        Each entry shape::
+
+            {
+                "url": "http://localhost:3000/rest/user/login",
+                "method": "POST",
+                "body": {"email": "__FUZZ__", "password": "x"},
+                "categories": ["sql_injection"],   # optional
+                "headers": {...},                  # optional
+            }
+        """
+        findings: list[Finding] = []
+        for entry in post_targets:
+            url = str(entry.get("url", ""))
+            method = str(entry.get("method", "POST"))
+            body_obj = entry.get("body")
+            if not url or not isinstance(body_obj, dict):
+                logger.warning(
+                    "fuzzer.post_target_skipped",
+                    reason="missing url or non-dict body",
+                    url=url,
+                )
+                continue
+            try:
+                self.scope.check(url)
+            except ScopeViolation as exc:
+                logger.warning("fuzzer.post_target_out_of_scope", url=str(exc.url))
+                continue
+            categories_raw = entry.get("categories")
+            if isinstance(categories_raw, list):
+                categories: list[str] = [str(c) for c in categories_raw]
+            else:
+                categories = list(self.config.fuzzing.categories)
+            extra_headers_raw = entry.get("headers")
+            extra_headers: dict[str, str] | None = None
+            if isinstance(extra_headers_raw, dict):
+                extra_headers = {str(k): str(v) for k, v in extra_headers_raw.items()}
+            for category in categories:
+                try:
+                    cat_findings = await self.fuzzer.fuzz_json_body(
+                        client=client,
+                        url=url,
+                        method=method,
+                        body_template=body_obj,
+                        category=category,
+                        scan_id=scan_id,  # type: ignore[arg-type]
+                        extra_headers=extra_headers,
+                    )
+                except ScopeViolation:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "fuzzer.post_category_failed",
+                        category=category,
+                        url=url,
+                        error=str(exc),
+                    )
+                    continue
+                findings.extend(cat_findings)
         return findings
 
     async def _run_fuzzing(
