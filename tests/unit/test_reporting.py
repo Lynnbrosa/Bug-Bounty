@@ -44,9 +44,7 @@ def result() -> ScanResult:
     ]
     return ScanResult(
         target="https://example.com/",
-        target_context=TargetContext(
-            program="HackerOne / acme", contact="sec@acme.example"
-        ),
+        target_context=TargetContext(program="HackerOne / acme", contact="sec@acme.example"),
         waf_detection=WafDetection(
             detected_vendors=["Cloudflare"], likely_protected=True, status_code=200
         ),

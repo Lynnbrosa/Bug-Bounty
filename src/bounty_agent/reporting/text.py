@@ -26,9 +26,7 @@ def render_text(result: ScanResult) -> str:
 
     ctx = result.target_context
     if ctx.program or ctx.contact:
-        lines.append(
-            f"Context: program={ctx.program or '-'}, contact={ctx.contact or '-'}"
-        )
+        lines.append(f"Context: program={ctx.program or '-'}, contact={ctx.contact or '-'}")
 
     waf = result.waf_detection
     if waf.error:
