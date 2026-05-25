@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import httpx
 
+from bounty_agent.auth import LoginConfig, LoginError, attempt_login
 from bounty_agent.config import Config
 from bounty_agent.core import (
     Finding,
@@ -96,12 +97,13 @@ class BountyAgent:
         self.tool_registry = tool_registry or ToolRegistry()
         self.tool_cache = tool_cache or NoopToolCache()
 
-    async def scan(
+    async def scan(  # noqa: PLR0912, PLR0915 - orchestrator entry; each branch is intentional
         self,
         target: str,
         target_context: TargetContext | None = None,
         preset_targets: list[str] | None = None,
         post_targets: list[dict[str, object]] | None = None,
+        login: LoginConfig | None = None,
     ) -> ScanResult:
         """Run a full scan.
 
@@ -114,6 +116,12 @@ class BountyAgent:
         ``url``, ``method``, ``body`` (a JSON-shaped dict where fields
         whose value equals :data:`FUZZ_MARKER` are substituted with
         payloads). Optional ``categories`` selects fuzzing categories.
+
+        ``login`` is an optional :class:`LoginConfig`. When supplied,
+        the agent posts the body to the configured URL before any
+        other request, extracts the bearer token, and injects it as a
+        default header on the shared httpx client. This unlocks
+        authenticated endpoints for the rest of the scan.
         """
         scan_id = uuid4()
         bind_scan_context(scan_id, target)
@@ -172,9 +180,39 @@ class BountyAgent:
             )
             scan_targets = recon.urls or [target]
 
+        # Build the shared client. If a login config is provided and
+        # succeeds, inject the resulting header into the client defaults so
+        # every fuzz / scan / sensitive request runs authenticated.
+        client_headers: dict[str, str] = {}
+        if login is not None:
+            try:
+                self.scope.check(login.url)
+            except ScopeViolation as exc:
+                logger.warning("auth.login_out_of_scope", url=str(exc.url))
+            else:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(self.config.agent.request_timeout_seconds),
+                    follow_redirects=True,
+                ) as auth_client:
+                    try:
+                        login_result = await attempt_login(auth_client, login)
+                    except LoginError as exc:
+                        logger.warning("auth.login_failed", error=str(exc))
+                        result = result.model_copy(
+                            update={"errors": [*result.errors, f"login failed: {exc}"]}
+                        )
+                    else:
+                        client_headers[login_result.header_name] = login_result.header_value
+                        audit(
+                            "auth.token_in_use",
+                            scan_id=str(scan_id),
+                            header_name=login_result.header_name,
+                        )
+
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(self.config.agent.request_timeout_seconds),
             follow_redirects=True,
+            headers=client_headers,
         ) as client:
             if self.config.waf.detect:
                 detection = await detect_waf_async(client, target, scope=self.scope)

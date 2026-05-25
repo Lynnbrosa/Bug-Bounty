@@ -95,9 +95,7 @@ class TestJwtAttackScannerScan:
             return_value=httpx.Response(200, text="anyone can read")
         )
         async with httpx.AsyncClient() as client:
-            findings = await scanner.scan(
-                client, VALID_TOKEN, ["https://example.com/public"]
-            )
+            findings = await scanner.scan(client, VALID_TOKEN, ["https://example.com/public"])
         assert findings == []
 
     async def test_invalid_token_no_findings(

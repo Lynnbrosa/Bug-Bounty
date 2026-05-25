@@ -23,6 +23,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bounty_agent import __version__, legacy
+from bounty_agent.auth import LoginConfig, LoginError
 from bounty_agent.config import load_config
 from bounty_agent.core import ScopeViolation, render_scan_result_json_schema
 from bounty_agent.eval import evaluate as eval_run
@@ -138,6 +139,20 @@ def scan_command(  # noqa: PLR0912, PLR0915 - CLI entry point with many options 
             ),
         ),
     ] = None,
+    login_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--login",
+            "-L",
+            help=(
+                "JSON file describing a login flow. The agent POSTs the body, "
+                "extracts a bearer token via token_jsonpath or token_regex, "
+                "and includes it on every subsequent request. Shape: "
+                "{url, body, token_jsonpath|token_regex, [method], [headers], "
+                "[header_name], [header_value_format]}."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run a modular scan."""
     config = load_config(config_path)
@@ -202,9 +217,33 @@ def scan_command(  # noqa: PLR0912, PLR0915 - CLI entry point with many options 
             err_console.print("[bold red]POST targets file is empty.[/bold red]")
             raise typer.Exit(code=2)
 
+    login_config: LoginConfig | None = None
+    if login_file is not None:
+        if not login_file.exists():
+            err_console.print(f"[bold red]Login file not found:[/bold red] {login_file}")
+            raise typer.Exit(code=2)
+        try:
+            login_data = json.loads(login_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            err_console.print(f"[bold red]Login file is not valid JSON:[/bold red] {exc}")
+            raise typer.Exit(code=2) from exc
+        if not isinstance(login_data, dict):
+            err_console.print("[bold red]Login file must contain a single JSON object.[/bold red]")
+            raise typer.Exit(code=2)
+        try:
+            login_config = LoginConfig.from_dict(login_data)
+        except LoginError as exc:
+            err_console.print(f"[bold red]Invalid login config:[/bold red] {exc}")
+            raise typer.Exit(code=2) from exc
+
     try:
         result = asyncio.run(
-            agent.scan(target, preset_targets=preset_targets, post_targets=post_targets)
+            agent.scan(
+                target,
+                preset_targets=preset_targets,
+                post_targets=post_targets,
+                login=login_config,
+            )
         )
     except ScopeViolation as exc:
         err_console.print(f"[bold red]Scope violation:[/bold red] {exc}")

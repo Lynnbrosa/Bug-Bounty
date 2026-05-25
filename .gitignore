@@ -56,6 +56,7 @@ targets.txt
 *-targets.txt
 targets-*.txt
 post-targets-*.json
+login-*.json
 
 bounty_report.txt
 bounty_findings.json
