@@ -36,6 +36,7 @@ fuzzing:
   payloads_per_param: 5
   categories:
     - sql_injection
+    - nosql_injection
     - xss
     - path_traversal
   # payloads_file: config/payloads-aggressive.yaml   # uncomment to load destructive payloads

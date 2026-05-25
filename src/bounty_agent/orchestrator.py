@@ -41,6 +41,7 @@ from bounty_agent.persistence.tool_cache import NoopToolCache, ToolCache
 from bounty_agent.recon.pipeline import ReconResult, run_recon_pipeline
 from bounty_agent.recon.waf import detect_async as detect_waf_async
 from bounty_agent.scanners import (
+    JwtAttackScanner,
     NucleiNotInstalledError,
     NucleiScanner,
     NucleiTimeoutError,
@@ -68,6 +69,7 @@ class BountyAgent:
         fuzzer: ResponsibleFuzzer | None = None,
         nuclei: NucleiScanner | None = None,
         sensitive: SensitivePathScanner | None = None,
+        jwt_scanner: JwtAttackScanner | None = None,
         scope: ScopePolicy | None = None,
         tool_registry: ToolRegistry | None = None,
         tool_cache: ToolCache | None = None,
@@ -84,6 +86,10 @@ class BountyAgent:
             config=config.nuclei.as_nuclei_config(), scope=self.scope
         )
         self.sensitive = sensitive or SensitivePathScanner(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
+        )
+        self.jwt_scanner = jwt_scanner or JwtAttackScanner(
             scope=self.scope,
             request_timeout_seconds=config.agent.request_timeout_seconds,
         )
@@ -193,6 +199,21 @@ class BountyAgent:
                 client, sensitive_targets, scan_id=scan_id
             )
             result = self._with_findings(result, sensitive_findings)
+
+            # JWT manipulation: if anything we found exposes a JWT (auth
+            # bypass, response leak), try alg:none and signature stripping
+            # against the scan target list. The scanner self-skips URLs
+            # that aren't actually auth-protected (200 in unauth baseline).
+            captured_jwts = _collect_jwts(result.findings)
+            for token in captured_jwts:
+                jwt_findings = await self.jwt_scanner.scan(
+                    client,
+                    token=token,
+                    protected_urls=sensitive_targets,
+                    scan_id=scan_id,
+                )
+                if jwt_findings:
+                    result = self._with_findings(result, jwt_findings)
 
         if self.config.nuclei.enabled:
             nuclei_findings, nuclei_errors = await self._run_nuclei_many(scan_targets, scan_id)
@@ -441,6 +462,24 @@ def _utcnow() -> datetime:
     from datetime import UTC, datetime
 
     return datetime.now(UTC)
+
+
+def _collect_jwts(findings: list[Finding]) -> list[str]:
+    """Return the unique full JWTs stashed in finding evidence.
+
+    The :class:`AuthBypassAnalyzer` parks the matched token in
+    ``evidence['jwt']``. Other producers may follow the same key in the
+    future; this helper de-duplicates and orders by first-seen so the
+    JWT scanner gets a stable input.
+    """
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for finding in findings:
+        token = finding.evidence.get("jwt") if finding.evidence else None
+        if isinstance(token, str) and token and token not in seen:
+            seen.add(token)
+            ordered.append(token)
+    return ordered
 
 
 def default_payload_registry(config: Config, project_root: Path | None = None) -> PayloadRegistry:

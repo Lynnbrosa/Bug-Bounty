@@ -57,12 +57,26 @@ class TestReflectedXssAnalyzer:
         assert finding is not None
         assert finding.severity is Severity.MEDIUM
 
-    def test_reflected_payload_in_json_is_skipped(self) -> None:
-        """JSON responses are unlikely to render as HTML; skip them."""
+    def test_reflected_payload_in_json_with_dangerous_chars_is_flagged(self) -> None:
+        """JSON reflection with HTML-active chars is medium-severity.
+
+        Many SPA frontends pass JSON values through unsafe sinks
+        (Angular [innerHTML], React dangerouslySetInnerHTML), so a
+        reflected payload that contains '<', '"', etc. is a real XSS
+        candidate even in JSON.
+        """
         analyzer = ReflectedXssAnalyzer()
         payload = "<script>x</script>"
         response = _response(text=f'{{"echo": "{payload}"}}', content_type="application/json")
         finding = analyzer.analyze("https://example.com/", payload, response)
+        assert finding is not None
+        assert finding.title.endswith("JSON response")
+
+    def test_inert_reflection_in_json_is_skipped(self) -> None:
+        """A JSON echo of a plain string (no dangerous chars) is not XSS."""
+        analyzer = ReflectedXssAnalyzer()
+        response = _response(text='{"echo": "harmless-string"}', content_type="application/json")
+        finding = analyzer.analyze("https://example.com/", "harmless-string", response)
         assert finding is None
 
     def test_no_reflection_returns_none(self) -> None:

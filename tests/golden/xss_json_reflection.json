@@ -1,6 +1,6 @@
 {
   "id": "xss-json-reflection",
-  "description": "Reflection in JSON response is not exploitable as XSS; analyzer should skip.",
+  "description": "Reflection of HTML-active payload in a JSON response. SPA frontends frequently pipe API responses through unsafe sinks ([innerHTML], dangerouslySetInnerHTML), so this is a real XSS candidate, not a false positive.",
   "category": "xss",
   "url": "https://example.com/api/echo?msg=hi",
   "payload": "<script>bounty-agent-probe</script>",
@@ -9,5 +9,5 @@
     "headers": {"content-type": "application/json"},
     "body": "{\"echo\": \"<script>bounty-agent-probe</script>\"}"
   },
-  "expected": "fp"
+  "expected": "tp"
 }

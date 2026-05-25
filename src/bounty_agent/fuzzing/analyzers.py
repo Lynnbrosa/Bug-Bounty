@@ -120,7 +120,20 @@ class SqlInjectionAnalyzer:
 
 @dataclass
 class ReflectedXssAnalyzer:
+    r"""Detects payload reflection in HTML, XML or JSON responses.
+
+    For HTML/XML, any verbatim reflection is medium-severity (XSS is
+    likely exploitable). For JSON, we only flag when the payload
+    contains characters that need to be escaped in an HTML render
+    context (``<``, ``"``, ``'``, ``&``, ``\`); a bare reflection of
+    ``test`` in a JSON field tells us nothing. This catches the case
+    where a Node.js API echoes the request body into the response and
+    the frontend pipes it through ``[innerHTML]`` / ``dangerouslySetInnerHTML``.
+    """
+
     category: str = "xss"
+
+    _DANGEROUS_CHARS = ("<", '"', "'", "&", "\\")
 
     def analyze(
         self,
@@ -133,16 +146,25 @@ class ReflectedXssAnalyzer:
         if payload not in body:
             return None
         content_type = response.headers.get("content-type", "").lower()
-        if "html" not in content_type and "xml" not in content_type:
+        is_markup = "html" in content_type or "xml" in content_type
+        is_json = "json" in content_type
+        if not (is_markup or is_json):
             return None
+        # JSON requires the payload to carry at least one dangerous char.
+        # Otherwise pure echo of an inert string would constantly fire.
+        if is_json and not any(ch in payload for ch in self._DANGEROUS_CHARS):
+            return None
+        kind = "HTML" if is_markup else "JSON"
         return Finding(
             url=url,  # type: ignore[arg-type]
             source=FindingSource.FUZZING,
             severity=Severity.MEDIUM,
-            title="Reflected payload in HTML response",
+            title=f"Reflected payload in {kind} response",
             description=(
-                "The payload was reflected verbatim in an HTML-typed response. "
-                "Check whether output encoding is applied."
+                f"The payload was reflected verbatim in a {kind} response. "
+                "Check whether output encoding is applied at every render "
+                "site (Angular [innerHTML], React dangerouslySetInnerHTML, "
+                "etc.)."
             ),
             payload=payload,
             evidence={
@@ -193,6 +215,79 @@ class PathTraversalAnalyzer:
                     },
                 )
         return None
+
+
+_NOSQL_ERROR_PATTERNS = re.compile(
+    r"|".join(
+        re.escape(marker)
+        for marker in (
+            # Mongo native driver
+            "mongoerror:",
+            "mongoservererror",
+            "mongoexception",
+            "mongoose error",
+            "mongooseerror",
+            # Mongo / BSON parse failures
+            "cast to objectid failed",
+            "could not parse json",
+            "couldn't parse json",
+            "unknown top level operator",
+            "unknown operator: $",
+            "$where requires",
+            "unknown modifier: $",
+            # Other NoSQL flavours
+            "rethinkdb error",
+            "couchdb error",
+            "redis error",
+            # Generic JS-side errors that often surface from injection
+            "syntaxerror: unexpected token",
+            "referenceerror: ",
+        )
+    ),
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class NoSqlInjectionAnalyzer:
+    """Detects NoSQL injection error patterns in response bodies.
+
+    Targets MongoDB/Mongoose/CouchDB/RethinkDB-shaped errors. Mongo
+    silently rewriting the query is the harder case (no error in the
+    body), which is why the AuthBypassAnalyzer is also relevant for the
+    ``[$ne]=1`` login-bypass pattern.
+    """
+
+    category: str = "nosql_injection"
+
+    def analyze(
+        self,
+        url: str,
+        payload: str,
+        response: httpx.Response,
+        baseline: httpx.Response | None = None,
+    ) -> Finding | None:
+        body = _safe_text(response)
+        match = _NOSQL_ERROR_PATTERNS.search(body)
+        if not match:
+            return None
+        return Finding(
+            url=url,  # type: ignore[arg-type]
+            source=FindingSource.FUZZING,
+            severity=Severity.HIGH,
+            title="Possible NoSQL injection (error-based)",
+            description=(
+                "Payload triggered a NoSQL/JS engine error message in the "
+                "response body. The endpoint is likely passing the input "
+                "into a Mongo/Mongoose/CouchDB query without coercion."
+            ),
+            payload=payload,
+            evidence={
+                "matched_marker": match.group(0),
+                "status_code": response.status_code,
+                "baseline_status_code": baseline.status_code if baseline else None,
+            },
+        )
 
 
 @dataclass
@@ -250,6 +345,7 @@ class AuthBypassAnalyzer:
         if not jwt_match and not token_match:
             return None
 
+        full_jwt = jwt_match.group(0) if jwt_match else None
         if jwt_match:
             marker = jwt_match.group(0)[:40]
         elif token_match:
@@ -274,6 +370,7 @@ class AuthBypassAnalyzer:
                 "status_code": response.status_code,
                 "baseline_status_code": baseline.status_code if baseline else None,
                 "has_jwt": bool(jwt_match),
+                "jwt": full_jwt,
             },
         )
 
@@ -322,6 +419,7 @@ class StatusDeltaAnalyzer:
 
 DEFAULT_ANALYZERS: tuple[Analyzer, ...] = (
     SqlInjectionAnalyzer(),
+    NoSqlInjectionAnalyzer(),
     AuthBypassAnalyzer(),
     ReflectedXssAnalyzer(),
     PathTraversalAnalyzer(),
@@ -339,6 +437,7 @@ __all__ = [
     "DEFAULT_ANALYZERS",
     "Analyzer",
     "AuthBypassAnalyzer",
+    "NoSqlInjectionAnalyzer",
     "PathTraversalAnalyzer",
     "ReflectedXssAnalyzer",
     "SqlInjectionAnalyzer",
