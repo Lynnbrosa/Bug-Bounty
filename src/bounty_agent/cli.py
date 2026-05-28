@@ -730,5 +730,110 @@ def tools_run(
         console.print(item)
 
 
+# =============================================================
+# OOB subcommands (out-of-band callback receiver)
+# =============================================================
+
+oob_app = typer.Typer(
+    name="oob",
+    help="Out-of-band callback receiver (blind-vuln detection).",
+    no_args_is_help=True,
+)
+app.add_typer(oob_app)
+
+
+@oob_app.command("serve")
+def oob_serve(
+    domain: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Root domain the wildcard DNS record points at. "
+                "Tokens land as <token>.<domain>; e.g. 'callback.example' "
+                "makes 'abc123.callback.example' a valid callback host."
+            )
+        ),
+    ],
+    bind_host: Annotated[
+        str, typer.Option("--bind", help="Interface to bind to (default 0.0.0.0).")
+    ] = "0.0.0.0",  # noqa: S104 - bind-all is the expected default for a callback server
+    bind_port: Annotated[
+        int, typer.Option("--port", help="TCP port to listen on (default 8080).")
+    ] = 8080,
+    persist_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--persist",
+            help=(
+                "Path to a JSONL file where callbacks are appended. "
+                "Survives restarts and lets bounty-agent oob status read events."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Run the OOB callback receiver until interrupted."""
+    from bounty_agent.oob import CallbackLog, OobServer
+
+    log_path = persist_path or Path("logs/oob-callbacks.jsonl")
+    log = CallbackLog(persist_path=log_path)
+    server = OobServer((bind_host, bind_port), root_domain=domain, log=log)
+    console.print(
+        f"[bold green]OOB server listening[/bold green] on "
+        f"http://{bind_host}:{bind_port}/ for *.{domain}"
+    )
+    console.print(f"[dim]Callbacks persisted to {log_path}[/dim]")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("[yellow]Stopping.[/yellow]")
+    finally:
+        server.server_close()
+
+
+@oob_app.command("status")
+def oob_status(
+    persist_path: Annotated[
+        Path,
+        typer.Option(
+            "--persist",
+            help="Path to the JSONL callback log to read (default logs/oob-callbacks.jsonl).",
+        ),
+    ] = Path("logs/oob-callbacks.jsonl"),
+    limit: Annotated[
+        int,
+        typer.Option("--tail", "-n", help="Show only the last N callbacks (default 20)."),
+    ] = 20,
+) -> None:
+    """Print recent callbacks recorded by the OOB server."""
+    from bounty_agent.oob import CallbackLog
+
+    if not persist_path.exists():
+        err_console.print(f"[bold red]No callback log:[/bold red] {persist_path} not found.")
+        raise typer.Exit(code=2)
+    log = CallbackLog(persist_path=persist_path)
+    events = log.all_events()
+    if not events:
+        console.print("[dim](no callbacks recorded yet)[/dim]")
+        return
+    recent = events[-limit:]
+    table = Table(title=f"OOB callbacks ({len(recent)} of {len(events)} shown)")
+    table.add_column("timestamp")
+    table.add_column("token")
+    table.add_column("src_ip")
+    table.add_column("method")
+    table.add_column("host")
+    table.add_column("path")
+    for event in recent:
+        table.add_row(
+            event.timestamp.isoformat(timespec="seconds"),
+            event.token,
+            event.src_ip,
+            event.method,
+            event.host,
+            event.path[:60],
+        )
+    console.print(table)
+
+
 if __name__ == "__main__":
     sys.exit(app())
