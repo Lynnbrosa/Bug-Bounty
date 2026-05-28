@@ -124,6 +124,7 @@ class ToolsSettings(_FrozenModel):
     dnsx: bool = True
     katana: bool = True
     naabu: bool = True
+    nmap: bool = False  # off by default: slower than naabu, requires binary on PATH
 
 
 class ToolsCacheSettings(_FrozenModel):

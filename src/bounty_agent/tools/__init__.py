@@ -31,6 +31,7 @@ from bounty_agent.tools.dnsx import Dnsx
 from bounty_agent.tools.httpx_prober import HttpxProber
 from bounty_agent.tools.katana import Katana
 from bounty_agent.tools.naabu import Naabu
+from bounty_agent.tools.nmap import Nmap
 from bounty_agent.tools.subfinder import Subfinder
 from bounty_agent.tools.waybackurls import Waybackurls
 
@@ -59,6 +60,7 @@ class ToolRegistry:
         Dnsx,
         Katana,
         Naabu,
+        Nmap,
     )
 
     def __init__(
@@ -115,6 +117,7 @@ __all__ = [
     "IntrusiveToolBlocked",
     "Katana",
     "Naabu",
+    "Nmap",
     "Subfinder",
     "Tool",
     "ToolDescriptor",

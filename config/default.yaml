@@ -70,6 +70,7 @@ tools:
   dnsx: true
   katana: true
   naabu: true
+  nmap: false   # opt-in; requires the nmap binary installed
 
 tools_cache:
   enabled: true

@@ -46,6 +46,7 @@ audit.log.*
 bounty-agent.yaml
 *.engagement.yaml
 juice.yaml
+psicologiaam.yaml
 
 # Per-scan artifacts (URLs discovered, target lists). Often contain
 # target-specific paths that should not leak.

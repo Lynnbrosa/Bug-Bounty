@@ -150,6 +150,14 @@ async def run_recon_pipeline(  # noqa: PLR0912 - linear pipeline of optional ste
         if result:
             findings.extend(_ports_to_findings(target, result))
 
+    if flags.nmap:
+        # nmap emits its own structured findings (service+version, NSE
+        # script outputs) inside the ToolResult.findings, so we just
+        # forward them.
+        result = await _safe_run(registry, "nmap", target, scope, errors, intrusive_ok=intrusive_ok)
+        if result:
+            findings.extend(result.findings)
+
     audit(
         "recon.finished",
         scan_id=str(scan_id) if scan_id else None,
