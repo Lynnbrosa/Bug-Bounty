@@ -70,7 +70,10 @@ tools:
   dnsx: true
   katana: true
   naabu: true
-  nmap: false   # opt-in; requires the nmap binary installed
+  nmap: false        # opt-in; requires the nmap binary installed
+  arjun: false       # opt-in; param discovery (pip install arjun)
+  subjack: false     # opt-in; subdomain takeover check (go install ...)
+  trufflehog: false  # opt-in; secret scanning (binary release)
 
 tools_cache:
   enabled: true

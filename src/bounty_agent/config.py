@@ -124,7 +124,10 @@ class ToolsSettings(_FrozenModel):
     dnsx: bool = True
     katana: bool = True
     naabu: bool = True
-    nmap: bool = False  # off by default: slower than naabu, requires binary on PATH
+    nmap: bool = False  # opt-in: slower than naabu, requires binary on PATH
+    arjun: bool = False  # opt-in: param discovery, requires arjun on PATH
+    subjack: bool = False  # opt-in: takeover check, requires subjack on PATH
+    trufflehog: bool = False  # opt-in: secret scanning, requires trufflehog on PATH
 
 
 class ToolsCacheSettings(_FrozenModel):

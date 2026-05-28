@@ -19,6 +19,7 @@ from typing import ClassVar
 
 from bounty_agent.core import ScopePolicy
 from bounty_agent.logging_setup import audit
+from bounty_agent.tools.arjun import Arjun
 from bounty_agent.tools.base import (
     BaseSubprocessTool,
     Tool,
@@ -33,6 +34,8 @@ from bounty_agent.tools.katana import Katana
 from bounty_agent.tools.naabu import Naabu
 from bounty_agent.tools.nmap import Nmap
 from bounty_agent.tools.subfinder import Subfinder
+from bounty_agent.tools.subjack import Subjack
+from bounty_agent.tools.trufflehog import TruffleHog
 from bounty_agent.tools.waybackurls import Waybackurls
 
 
@@ -61,6 +64,9 @@ class ToolRegistry:
         Katana,
         Naabu,
         Nmap,
+        Arjun,
+        Subjack,
+        TruffleHog,
     )
 
     def __init__(
@@ -111,6 +117,7 @@ class ToolRegistry:
 
 
 __all__ = [
+    "Arjun",
     "BaseSubprocessTool",
     "Dnsx",
     "HttpxProber",
@@ -119,6 +126,7 @@ __all__ = [
     "Naabu",
     "Nmap",
     "Subfinder",
+    "Subjack",
     "Tool",
     "ToolDescriptor",
     "ToolError",
@@ -126,5 +134,6 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "ToolTimeoutError",
+    "TruffleHog",
     "Waybackurls",
 ]

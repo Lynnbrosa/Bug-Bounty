@@ -29,7 +29,7 @@ class _StubActive(_StubPassive):
     binary: ClassVar[str] = "stub-active-binary"
 
 
-def test_default_registry_lists_all_six_tools() -> None:
+def test_default_registry_lists_all_default_tools() -> None:
     registry = ToolRegistry()
     assert set(registry.names()) == {
         "subfinder",
@@ -38,6 +38,10 @@ def test_default_registry_lists_all_six_tools() -> None:
         "dnsx",
         "katana",
         "naabu",
+        "nmap",
+        "arjun",
+        "subjack",
+        "trufflehog",
     }
 
 
