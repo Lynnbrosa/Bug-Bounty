@@ -162,7 +162,19 @@ def test_recon_runs_and_writes_output(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_tools_list_renders_all_known_tools() -> None:
     result = runner.invoke(app, ["tools", "list"])
     assert result.exit_code == 0
-    for name in ("subfinder", "waybackurls", "httpx", "dnsx", "katana", "naabu"):
+    expected = (
+        "subfinder",
+        "waybackurls",
+        "httpx",
+        "dnsx",
+        "katana",
+        "naabu",
+        "nmap",
+        "arjun",
+        "subjack",
+        "trufflehog",
+    )
+    for name in expected:
         assert name in result.stdout
 
 
