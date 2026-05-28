@@ -835,5 +835,40 @@ def oob_status(
     console.print(table)
 
 
+@app.command("demo")
+def demo_command(
+    target: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--target",
+            "-t",
+            help="Target URL(s) to demo against. Defaults to http://localhost:3000/.",
+        ),
+    ] = None,
+    use_llm: Annotated[
+        bool,
+        typer.Option(
+            "--use-llm",
+            help=(
+                "Hit the Anthropic API for adaptive payloads / exploit chain "
+                "/ PoC. Off by default so the demo is reproducible offline."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """End-to-end visual demo of every agent capability."""
+    from bounty_agent.demo import DemoTarget, run_demo
+
+    targets = (
+        [DemoTarget(url=u, label=u) for u in target] if target else []
+    )
+    # Use an ASCII-safe Console so the demo renders cleanly in legacy
+    # Windows consoles (default code page 850/1252). Rich would
+    # otherwise insert wide-char ellipsis / box-drawing chars that
+    # crash on WriteConsoleW.
+    demo_console = Console(legacy_windows=False, force_terminal=True, soft_wrap=False)
+    asyncio.run(run_demo(targets, console=demo_console, use_llm=use_llm))
+
+
 if __name__ == "__main__":
     sys.exit(app())
