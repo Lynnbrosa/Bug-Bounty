@@ -84,10 +84,7 @@ class FingerprintSet:
         removed = sorted(prev_urls - curr_urls)
         changed: list[str] = []
         for url in sorted(prev_urls & curr_urls):
-            if (
-                previous.fingerprints[url].structural_hash
-                != self.fingerprints[url].structural_hash
-            ):
+            if previous.fingerprints[url].structural_hash != self.fingerprints[url].structural_hash:
                 changed.append(url)
         return {"added": added, "removed": removed, "changed": changed}
 
@@ -116,9 +113,7 @@ async def fingerprint_endpoints(
     """GET each URL once, return a FingerprintSet."""
     fingerprints: dict[str, EndpointFingerprint] = {}
     audit("visual.fingerprint_started", target=target, urls=len(urls))
-    async with httpx.AsyncClient(
-        timeout=request_timeout_seconds, follow_redirects=True
-    ) as client:
+    async with httpx.AsyncClient(timeout=request_timeout_seconds, follow_redirects=True) as client:
         coros = [_fingerprint_one(client, url) for url in urls]
         results = await asyncio.gather(*coros, return_exceptions=True)
     for url, outcome in zip(urls, results, strict=True):
@@ -135,9 +130,7 @@ async def fingerprint_endpoints(
     return FingerprintSet(target=target, fingerprints=fingerprints)
 
 
-async def _fingerprint_one(
-    client: httpx.AsyncClient, url: str
-) -> EndpointFingerprint:
+async def _fingerprint_one(client: httpx.AsyncClient, url: str) -> EndpointFingerprint:
     response = await client.get(url)
     return fingerprint_response(url, response)
 

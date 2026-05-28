@@ -153,6 +153,17 @@ def scan_command(  # noqa: PLR0912, PLR0915 - CLI entry point with many options 
             ),
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Render the planned scan (phases, target counts, "
+                "estimated request volume) WITHOUT sending any request. "
+                "Useful to prove scope compliance before engaging."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run a modular scan."""
     config = load_config(config_path)
@@ -235,6 +246,18 @@ def scan_command(  # noqa: PLR0912, PLR0915 - CLI entry point with many options 
         except LoginError as exc:
             err_console.print(f"[bold red]Invalid login config:[/bold red] {exc}")
             raise typer.Exit(code=2) from exc
+
+    if dry_run:
+        from bounty_agent.dryrun import plan_scan, render_plan
+
+        plan = plan_scan(
+            config,
+            target,
+            preset_targets=preset_targets,
+            post_targets=post_targets,
+        )
+        render_plan(plan, console)
+        raise typer.Exit(code=0)
 
     try:
         result = asyncio.run(
@@ -859,9 +882,7 @@ def demo_command(
     """End-to-end visual demo of every agent capability."""
     from bounty_agent.demo import DemoTarget, run_demo
 
-    targets = (
-        [DemoTarget(url=u, label=u) for u in target] if target else []
-    )
+    targets = [DemoTarget(url=u, label=u) for u in target] if target else []
     # Use an ASCII-safe Console so the demo renders cleanly in legacy
     # Windows consoles (default code page 850/1252). Rich would
     # otherwise insert wide-char ellipsis / box-drawing chars that

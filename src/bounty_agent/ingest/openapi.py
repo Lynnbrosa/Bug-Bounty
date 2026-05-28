@@ -69,9 +69,7 @@ def ingest_openapi_spec(
 
     server = base_url or _first_server_url(document)
     if not server:
-        warnings.append(
-            "No base URL: pass --base-url or add a servers[] entry to the spec."
-        )
+        warnings.append("No base URL: pass --base-url or add a servers[] entry to the spec.")
         server = ""
     server = server.rstrip("/")
 

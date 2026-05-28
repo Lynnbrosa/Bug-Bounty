@@ -1,6 +1,14 @@
-# 🎯 Bug Bounty Agent - Guia Completo
+# Bug Bounty Agent - Guia Completo (legacy)
 
-## 📋 Índice
+> **Aviso de status:** este documento descreve o agente em sua forma
+> monolítica original (script único, Python 3.8+, dependências manuais).
+> A partir da v0.2 o agente foi refatorado em pacote modular sob
+> `src/bounty_agent/`, exige **Python 3.11+** e é instalado via
+> `pip install -e .`. Para a documentação atual, consulte o
+> [README.md](../README.md) na raiz. Este guia fica como referência
+> histórica e para quem ainda usa o subcomando `bounty-agent legacy-scan`.
+
+## Índice
 1. [Setup e Instalação](#setup)
 2. [Configuração](#configuração)
 3. [Uso Básico](#uso-básico)
@@ -10,11 +18,11 @@
 
 ---
 
-## 🚀 Setup e Instalação {#setup}
+## Setup e Instalação {#setup}
 
-### Pré-requisitos
+### Pré-requisitos (legacy, single-file)
 ```bash
-# Python 3.8+
+# Python 3.8+ (legacy — versão modular exige 3.11+)
 python3 --version
 
 # Instalar dependências

@@ -175,11 +175,13 @@ CI matrix runs lint, format check, mypy and pytest on Python 3.11 and 3.12, then
 
 ## Roadmap
 
-The repo is at `v0.1`. Capability is stable; the next iterations focus on quality and coverage rather than features:
+The repo is at `v0.3`. Core pipeline plus differentiator features (OOB callback receiver, LLM-driven exploit-chain reasoning, auto-PoC generator, adaptive payload generation, prompt-injection analyzer, OpenAPI ingestion, continuous diff with webhook alerting, visual fingerprint diff) are in place. Near-term iterations:
 
-- expand `tests/golden/` from real scans
-- add `tools/` wrappers for one or two more popular OSS scanners
-- richer `history diff` (severity-weighted delta, exportable)
+- expand `tests/golden/` with more real-world scans
+- playwright-backed screenshots on top of the existing visual fingerprint module
+- `bounty-agent dry-run <url>` to preview every outbound request before sending one byte
+- Postman v2.1 ingestion alongside the OpenAPI importer
+- Slack-native webhook formatting in `continuous.notifier`
 - batch `llm-classify` over multiple scans
 
 ## License

@@ -60,9 +60,7 @@ class DemoTarget:
     label: str
 
 
-_DEFAULT_TARGETS = (
-    DemoTarget("http://localhost:3000/", "OWASP Juice Shop (local)"),
-)
+_DEFAULT_TARGETS = (DemoTarget("http://localhost:3000/", "OWASP Juice Shop (local)"),)
 
 
 async def run_demo(
@@ -125,9 +123,7 @@ async def _section_sensitive(console: Console, target: DemoTarget) -> None:
         target.url.rstrip("/") + suffix
         for suffix in ("/", "/metrics", "/robots.txt", "/.env", "/ftp")
     ]
-    scope = ScopePolicy.from_iterables(
-        ["localhost", "127.0.0.1", "*"], []
-    )
+    scope = ScopePolicy.from_iterables(["localhost", "127.0.0.1", "*"], [])
     scanner = SensitivePathScanner(scope=scope, request_timeout_seconds=5.0)
     async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
         findings = await scanner.scan(client, urls)
@@ -158,10 +154,7 @@ async def _section_sensitive(console: Console, target: DemoTarget) -> None:
 
 
 async def _section_visual(console: Console, target: DemoTarget) -> None:
-    urls = [
-        target.url.rstrip("/") + suffix
-        for suffix in ("/", "/robots.txt")
-    ]
+    urls = [target.url.rstrip("/") + suffix for suffix in ("/", "/robots.txt")]
     fps = await fingerprint_endpoints(target.url, urls)
     table = Table(
         title="3. visual fingerprint  -  structural-hash per endpoint",
@@ -218,9 +211,7 @@ async def _section_oob(console: Console, target: DemoTarget) -> None:
     persist_path.write_text(  # noqa: ASYNC240 - tiny synchronous fixture write
         log.all_events()[0].to_jsonl() + "\n", encoding="utf-8"
     )
-    correlator = OobCorrelator(
-        OobCorrelationConfig(local_log_path=persist_path, wait_seconds=0)
-    )
+    correlator = OobCorrelator(OobCorrelationConfig(local_log_path=persist_path, wait_seconds=0))
     findings = await correlator.correlate(
         registry, scan_started_at=datetime.now(UTC).replace(year=2020)
     )
@@ -356,9 +347,7 @@ def _section_continuous(console: Console, target: DemoTarget) -> None:
     table.add_column("bucket")
     table.add_column("count")
     table.add_column("examples")
-    table.add_row(
-        "new", str(len(diff.new)), "; ".join(f.title for f in diff.new) or "-"
-    )
+    table.add_row("new", str(len(diff.new)), "; ".join(f.title for f in diff.new) or "-")
     table.add_row(
         "repeated",
         str(len(diff.repeated)),
@@ -391,9 +380,7 @@ def _section_continuous(console: Console, target: DemoTarget) -> None:
 # =============================================================
 
 
-async def _section_adaptive(
-    console: Console, target: DemoTarget, use_llm: bool
-) -> None:
+async def _section_adaptive(console: Console, target: DemoTarget, use_llm: bool) -> None:
     # Stack inference (dry): in real use, this comes from recon.
     stack = {
         "server": "Apache",
@@ -480,8 +467,7 @@ def _section_exploit_chain(console: Console, use_llm: bool) -> None:
                 finding_url="http://localhost:3000/rest/user/login",
                 finding_title="Authentication bypass via injection",
                 intent=(
-                    "Use admin email with SQL injection suffix to receive a "
-                    "JWT for the admin role."
+                    "Use admin email with SQL injection suffix to receive a JWT for the admin role."
                 ),
             ),
             ExploitStep(
@@ -607,9 +593,7 @@ def _section_ai_probe(console: Console) -> None:
         table.add_row("status", "[bold red]injection detected[/bold red]")
         table.add_row("title", finding.title)
         table.add_row("severity", finding.severity.value)
-        table.add_row(
-            "matched_marker", str(finding.evidence.get("matched_marker", ""))
-        )
+        table.add_row("matched_marker", str(finding.evidence.get("matched_marker", "")))
     console.print(Panel(table, border_style="cyan"))
 
 
