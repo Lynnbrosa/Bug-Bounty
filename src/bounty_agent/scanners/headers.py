@@ -148,6 +148,88 @@ class CookieSecurityAuditor:
 _CSP_UNSAFE_TOKENS = ("'unsafe-inline'", "'unsafe-eval'")
 
 
+# Five security headers that almost every bug bounty program expects
+# on every HTTPS response. Missing ones land as LOW findings.
+_REQUIRED_HEADERS: tuple[tuple[str, str, str], ...] = (
+    (
+        "strict-transport-security",
+        "HSTS header missing (Strict-Transport-Security)",
+        "The response lacks Strict-Transport-Security. A network attacker can "
+        "downgrade subsequent connections to HTTP and intercept traffic via "
+        "SSL stripping. Add `Strict-Transport-Security: max-age=31536000; "
+        "includeSubDomains` once the operator confirms every subdomain is "
+        "HTTPS-only.",
+    ),
+    (
+        "x-frame-options",
+        "X-Frame-Options header missing",
+        "Without X-Frame-Options (or a CSP frame-ancestors directive) the "
+        "page can be embedded in a hostile iframe (clickjacking).",
+    ),
+    (
+        "x-content-type-options",
+        "X-Content-Type-Options header missing",
+        "Without `X-Content-Type-Options: nosniff` browsers may MIME-sniff "
+        "responses and execute attacker-controlled bytes in unexpected "
+        "contexts (e.g. user-uploaded images interpreted as scripts).",
+    ),
+    (
+        "referrer-policy",
+        "Referrer-Policy header missing",
+        "Without a Referrer-Policy the browser sends the full URL (including "
+        "query string) to third-party origins. Common leak surface for "
+        "tokens, session ids and UTM-encoded PII.",
+    ),
+    (
+        "permissions-policy",
+        "Permissions-Policy header missing",
+        "Without Permissions-Policy (or the legacy Feature-Policy) the page "
+        "inherits the browser default for sensitive APIs (camera, "
+        "microphone, geolocation, payment, USB). Restrict explicitly.",
+    ),
+)
+
+
+class SecurityHeadersAuditor:
+    """Flag responses missing the canonical security headers.
+
+    Runs alongside :class:`CspAuditor` (which already covers CSP). The
+    orchestrator dedupes per (host, finding-title) so a site with no
+    HSTS reports the gap once for the whole host, not once per URL.
+    """
+
+    def audit(self, url: str, response: httpx.Response) -> list[Finding]:
+        # Only HTTPS responses are expected to carry HSTS; the other
+        # four apply regardless of scheme.
+        is_https = url.startswith("https://")
+        findings: list[Finding] = []
+        for header_name, title, description in _REQUIRED_HEADERS:
+            if header_name == "strict-transport-security" and not is_https:
+                continue
+            if response.headers.get(header_name):
+                continue
+            findings.append(
+                Finding(
+                    url=url,  # type: ignore[arg-type]
+                    source=FindingSource.MANUAL,
+                    severity=Severity.LOW,
+                    title=title,
+                    description=description,
+                    evidence={
+                        "header": header_name,
+                        "tool": "security-headers",
+                    },
+                )
+            )
+        if findings:
+            audit(
+                "headers.security_headers_findings",
+                url=url,
+                count=len(findings),
+            )
+        return findings
+
+
 class CspAuditor:
     """Parse Content-Security-Policy and flag the usual unsafe sinks."""
 
@@ -267,4 +349,4 @@ def _parse_csp(value: str) -> dict[str, list[str]]:
     return parsed
 
 
-__all__ = ["CookieSecurityAuditor", "CspAuditor"]
+__all__ = ["CookieSecurityAuditor", "CspAuditor", "SecurityHeadersAuditor"]

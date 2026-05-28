@@ -48,12 +48,15 @@ from bounty_agent.scanners import (
     CookieSecurityAuditor,
     CorsProbeScanner,
     CspAuditor,
+    HttpsEnforcementChecker,
     JwtAttackScanner,
     NucleiNotInstalledError,
     NucleiScanner,
     NucleiTimeoutError,
     OpenRedirectScanner,
+    SecurityHeadersAuditor,
     SensitivePathScanner,
+    Soft404Detector,
 )
 from bounty_agent.tools import ToolRegistry
 
@@ -120,6 +123,15 @@ class BountyAgent:
         )
         self.cookie_auditor = CookieSecurityAuditor(scope=self.scope)
         self.csp_auditor = CspAuditor()
+        self.security_headers_auditor = SecurityHeadersAuditor()
+        self.https_enforcement_checker = HttpsEnforcementChecker(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
+        )
+        self.soft404_detector = Soft404Detector(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
+        )
         self.tool_registry = tool_registry or ToolRegistry()
         self.tool_cache = tool_cache or NoopToolCache()
 
@@ -280,6 +292,11 @@ class BountyAgent:
                     continue
                 host = urlparse(url).hostname or url
                 fresh: list[Finding] = []
+                # Cookies vary per response (different paths can set
+                # different cookies); CSP and the 5 generic security
+                # headers are server-wide. Dedup on (host, title) so
+                # a target that omits HSTS reports it ONCE for the
+                # host, not 18x.
                 for finding in self.cookie_auditor.audit(url, response):
                     key = (host, finding.title)
                     if key in header_seen:
@@ -292,8 +309,32 @@ class BountyAgent:
                         continue
                     header_seen.add(key)
                     fresh.append(finding)
+                for finding in self.security_headers_auditor.audit(url, response):
+                    key = (host, finding.title)
+                    if key in header_seen:
+                        continue
+                    header_seen.add(key)
+                    fresh.append(finding)
                 if fresh:
                     result = self._with_findings(result, fresh)
+
+            # Transport-layer probes: one HTTP-without-HTTPS check
+            # per unique host, and one soft-404 check per host. Both
+            # are cheap (1-3 GETs each); both produce findings that
+            # the rest of the pipeline cannot see because they leave
+            # the HTTPS-only request flow OR test invented paths.
+            transport_seen_hosts: set[str] = set()
+            for url in sensitive_targets:
+                host = urlparse(url).hostname or url
+                if host in transport_seen_hosts:
+                    continue
+                transport_seen_hosts.add(host)
+                https_finding = await self.https_enforcement_checker.check(client, url)
+                if https_finding is not None:
+                    result = self._with_findings(result, [https_finding])
+                soft_finding = await self.soft404_detector.check(client, url)
+                if soft_finding is not None:
+                    result = self._with_findings(result, [soft_finding])
 
             # Active CORS misconfiguration probe (4 forged Origins per URL).
             cors_findings = await self.cors_scanner.scan(client, sensitive_targets)
