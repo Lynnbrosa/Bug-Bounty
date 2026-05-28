@@ -45,10 +45,14 @@ from bounty_agent.persistence.tool_cache import NoopToolCache, ToolCache
 from bounty_agent.recon.pipeline import ReconResult, run_recon_pipeline
 from bounty_agent.recon.waf import detect_async as detect_waf_async
 from bounty_agent.scanners import (
+    CookieSecurityAuditor,
+    CorsProbeScanner,
+    CspAuditor,
     JwtAttackScanner,
     NucleiNotInstalledError,
     NucleiScanner,
     NucleiTimeoutError,
+    OpenRedirectScanner,
     SensitivePathScanner,
 )
 from bounty_agent.tools import ToolRegistry
@@ -106,6 +110,16 @@ class BountyAgent:
             scope=self.scope,
             request_timeout_seconds=config.agent.request_timeout_seconds,
         )
+        self.cors_scanner = CorsProbeScanner(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
+        )
+        self.open_redirect_scanner = OpenRedirectScanner(
+            scope=self.scope,
+            request_timeout_seconds=config.agent.request_timeout_seconds,
+        )
+        self.cookie_auditor = CookieSecurityAuditor(scope=self.scope)
+        self.csp_auditor = CspAuditor()
         self.tool_registry = tool_registry or ToolRegistry()
         self.tool_cache = tool_cache or NoopToolCache()
 
@@ -250,6 +264,25 @@ class BountyAgent:
                 client, sensitive_targets, scan_id=scan_id
             )
             result = self._with_findings(result, sensitive_findings)
+
+            # Header-based passive audits (cookies + CSP). One GET per
+            # endpoint, no payload. Yields findings that bug bounty
+            # triage teams accept on most H1 programs.
+            for url in sensitive_targets:
+                try:
+                    response = await client.get(url)
+                except httpx.HTTPError:
+                    continue
+                result = self._with_findings(result, self.cookie_auditor.audit(url, response))
+                result = self._with_findings(result, self.csp_auditor.audit(url, response))
+
+            # Active CORS misconfiguration probe (4 forged Origins per URL).
+            cors_findings = await self.cors_scanner.scan(client, sensitive_targets)
+            result = self._with_findings(result, cors_findings)
+
+            # Active open-redirect probe (6 payloads x candidate params).
+            redirect_findings = await self.open_redirect_scanner.scan(client, sensitive_targets)
+            result = self._with_findings(result, redirect_findings)
 
             # JWT manipulation: if anything we found exposes a JWT (auth
             # bypass, response leak), try alg:none and signature stripping

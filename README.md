@@ -1,12 +1,24 @@
 # bounty-agent
 
-Responsible bug bounty research agent for authorised security testing.
+Bug bounty research agent for authorised security testing. Built to find paid-for bugs on real HackerOne / Bugcrowd programs without the boilerplate of stitching together six different tools by hand.
 
-Orchestrates external tools (`nuclei`, `subfinder`, `waybackurls`, `httpx`, `dnsx`, `katana`, `naabu`) plus an in-process fuzzer and WAF detector. Every URL passes through a hard scope guard before any request leaves the process; every action is recorded in an append-only JSONL audit log; every scan is persisted to SQLite with a schema-versioned envelope.
+What it does in one scan, all opt-in:
+
+- **Recon** via 10 external tool wrappers (subfinder, waybackurls, httpx, dnsx, katana, naabu, nmap, arjun, subjack, trufflehog).
+- **Fuzzing** with 7 in-process analyzers: SQL injection (Node/Sequelize/SQLite/PG/MySQL/Oracle markers), NoSQL injection (Mongo/Couch/Rethink), reflected XSS (HTML + JSON-aware), path traversal, auth bypass via JWT capture, prompt injection on AI-powered endpoints, status delta.
+- **Out-of-band callback receiver** for blind vulns (blind SQLi, SSRF, XXE, log4shell, blind command injection). Self-hosted server + correlator that turns silent backends into CRITICAL findings with confidence 1.0. Equivalent of Burp Collaborator / Interactsh.
+- **H1-grade passive + active probes**: CORS misconfiguration (4 forged Origins), open redirect (6 bypass payloads × 14 param names), cookie security audit (Secure / HttpOnly / SameSite), CSP weakness analyzer, sensitive content scanner (17 signatures incl. AWS keys, private keys, env files, /metrics, /ftp listings, %2500 null-byte bypass), JWT alg:none + signature stripping.
+- **LLM-driven reasoning** (opt-in): adaptive payload generation tailored to the target stack, exploit chain reasoner that links findings into a demonstrated attack path, auto-PoC generator that writes runnable Python with an optional sandboxed validator, finding classifier for TP/FP triage.
+- **OpenAPI 3.x ingestion** that turns a spec into a ready-to-scan targets + post-targets file.
+- **Continuous diff** with stable identity hashing + webhook notifier for ongoing recon.
+- **Visual content fingerprint** with noise-redacted hashes + diff across scans.
+- **Dry-run mode** that renders the planned scan (scope, phases, estimated request count) without sending a single byte. Useful to prove scope compliance to a program before engaging.
+
+Every URL passes through a hard scope guard before any request leaves the process; every action is recorded in an append-only JSONL audit log; every scan is persisted to SQLite with a schema-versioned envelope. 320 tests, CI on Python 3.11 + 3.12.
 
 ## Scope and authorisation
 
-This tool refuses to scan any host that is not in `scope.allowlist`. Every command that touches a target also requires `--authorized`. Intrusive tools (`katana`, `naabu`) further require `--intrusive`. Decisions, requests and findings land in the audit log.
+This tool refuses to scan any host that is not in `scope.allowlist`. Intrusive tools (`katana`, `naabu`, `nmap`, `arjun`) require the caller to opt in explicitly. Decisions, requests and findings land in the audit log.
 
 Use only against targets you are authorised to test: bug bounty programs in scope, signed pentest engagements, your own systems, CTF environments. Do not use to evade WAFs in production, conduct mass scanning, or test without permission.
 
