@@ -266,15 +266,34 @@ class BountyAgent:
             result = self._with_findings(result, sensitive_findings)
 
             # Header-based passive audits (cookies + CSP). One GET per
-            # endpoint, no payload. Yields findings that bug bounty
-            # triage teams accept on most H1 programs.
+            # endpoint, no payload. Findings are deduped by (host,
+            # finding-title) because CSP and cookie attributes are
+            # configured at the server / CDN level and don't usually
+            # vary across paths on the same host. Without dedup a site
+            # with no CSP would report "CSP missing" once per scanned
+            # URL, which is pure noise.
+            header_seen: set[tuple[str, str]] = set()
             for url in sensitive_targets:
                 try:
                     response = await client.get(url)
                 except httpx.HTTPError:
                     continue
-                result = self._with_findings(result, self.cookie_auditor.audit(url, response))
-                result = self._with_findings(result, self.csp_auditor.audit(url, response))
+                host = urlparse(url).hostname or url
+                fresh: list[Finding] = []
+                for finding in self.cookie_auditor.audit(url, response):
+                    key = (host, finding.title)
+                    if key in header_seen:
+                        continue
+                    header_seen.add(key)
+                    fresh.append(finding)
+                for finding in self.csp_auditor.audit(url, response):
+                    key = (host, finding.title)
+                    if key in header_seen:
+                        continue
+                    header_seen.add(key)
+                    fresh.append(finding)
+                if fresh:
+                    result = self._with_findings(result, fresh)
 
             # Active CORS misconfiguration probe (4 forged Origins per URL).
             cors_findings = await self.cors_scanner.scan(client, sensitive_targets)

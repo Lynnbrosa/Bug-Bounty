@@ -118,6 +118,114 @@ class SqlInjectionAnalyzer:
         )
 
 
+# Payload fragments that, if present and the backend takes notably
+# longer than baseline to respond, suggest the database actually
+# executed a SLEEP/WAITFOR. Kept short and lower-case so the match is
+# substring-based on the canonical payload form.
+_TIME_BASED_SQL_SIGNATURES: tuple[str, ...] = (
+    "sleep(",  # MySQL / MariaDB
+    "pg_sleep(",  # PostgreSQL
+    "waitfor delay",  # MSSQL
+    "dbms_pipe.receive_message",  # Oracle
+    "benchmark(",  # MySQL
+)
+
+
+_TIME_BASED_DELAY_SECONDS = 4.0  # threshold: response 4s+ slower than baseline
+
+
+@dataclass
+class TimeBasedSqlInjectionAnalyzer:
+    """Detects blind SQLi via response-time delta.
+
+    The fuzzer ships payloads like ``1' AND SLEEP(5)--`` that the
+    error-based analyzer can't catch on apps that suppress error
+    output. When the database actually executes the SLEEP, the
+    response arrives 5+ seconds later than the baseline. This
+    analyzer reads ``httpx.Response.elapsed`` and flags the payload
+    when:
+
+    1. the payload string contains a known time-based signature
+       (otherwise we have nothing to attribute the slowness to);
+    2. the response is at least :data:`_TIME_BASED_DELAY_SECONDS`
+       slower than the baseline (or absolute response time is
+       >= 4s when no baseline available).
+
+    The :class:`bounty_agent.fuzzing.ResponsibleFuzzer` already runs
+    a verification request for time-based hits before letting them
+    through, so this analyzer only needs to flag the first-hit
+    candidate; the fuzzer kills false positives via retry timing.
+    """
+
+    category: str = "sql_injection"
+    delay_threshold_seconds: float = _TIME_BASED_DELAY_SECONDS
+
+    def analyze(
+        self,
+        url: str,
+        payload: str,
+        response: httpx.Response,
+        baseline: httpx.Response | None = None,
+    ) -> Finding | None:
+        if not _payload_is_time_based(payload):
+            return None
+        response_seconds = _response_elapsed(response)
+        if response_seconds is None:
+            return None
+        baseline_seconds = _response_elapsed(baseline) if baseline is not None else None
+        if baseline_seconds is None:
+            # No baseline: require an absolute floor so we don't
+            # flag slow-but-normal endpoints.
+            if response_seconds < self.delay_threshold_seconds:
+                return None
+            delta = response_seconds
+        else:
+            delta = response_seconds - baseline_seconds
+            if delta < self.delay_threshold_seconds:
+                return None
+        return Finding(
+            url=url,  # type: ignore[arg-type]
+            source=FindingSource.FUZZING,
+            severity=Severity.HIGH,
+            title="Possible SQL injection (time-based blind)",
+            description=(
+                "A payload containing a time-based SQL function "
+                "(SLEEP/pg_sleep/WAITFOR/BENCHMARK) caused the "
+                "response to arrive significantly later than baseline. "
+                "The backend likely executed the delay function, which "
+                "means the parameter is SQL-injectable. The fuzzer "
+                "verifies the hit with a second timed request before "
+                "this finding is recorded; if you see it, the slowdown "
+                "reproduced. Manual confirmation still recommended."
+            ),
+            payload=payload,
+            evidence={
+                "response_seconds": round(response_seconds, 3),
+                "baseline_seconds": (
+                    round(baseline_seconds, 3) if baseline_seconds is not None else None
+                ),
+                "delta_seconds": round(delta, 3),
+                "delay_threshold_seconds": self.delay_threshold_seconds,
+                "status_code": response.status_code,
+            },
+        )
+
+
+def _payload_is_time_based(payload: str) -> bool:
+    lower = payload.lower()
+    return any(sig in lower for sig in _TIME_BASED_SQL_SIGNATURES)
+
+
+def _response_elapsed(response: httpx.Response | None) -> float | None:
+    """Read ``response.elapsed`` defensively (some mocks omit it)."""
+    if response is None:
+        return None
+    elapsed = getattr(response, "elapsed", None)
+    if elapsed is None:
+        return None
+    return float(elapsed.total_seconds())
+
+
 @dataclass
 class ReflectedXssAnalyzer:
     r"""Detects payload reflection in HTML, XML or JSON responses.
@@ -497,6 +605,7 @@ class PromptInjectionAnalyzer:
 
 DEFAULT_ANALYZERS: tuple[Analyzer, ...] = (
     SqlInjectionAnalyzer(),
+    TimeBasedSqlInjectionAnalyzer(),
     NoSqlInjectionAnalyzer(),
     AuthBypassAnalyzer(),
     ReflectedXssAnalyzer(),
@@ -522,4 +631,5 @@ __all__ = [
     "ReflectedXssAnalyzer",
     "SqlInjectionAnalyzer",
     "StatusDeltaAnalyzer",
+    "TimeBasedSqlInjectionAnalyzer",
 ]

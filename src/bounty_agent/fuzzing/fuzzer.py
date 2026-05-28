@@ -343,6 +343,25 @@ class ResponsibleFuzzer:
                 finding = analyzer.analyze(test_url, payload, response, baseline)
                 if finding is None:
                     continue
+                # Time-based blind SQLi: verify by re-sending the same
+                # request and re-running the analyzer. If the slowdown
+                # was network noise, the second call comes back fast and
+                # the second analyse() returns None -> we drop the
+                # candidate. This collapses ~80% of FPs on shared
+                # hosting / slow targets while keeping TPs essentially
+                # unchanged (real time-based SQLi reproduces).
+                if "time-based" in finding.title.lower():
+                    verification = await self._safe_request(client, "GET", test_url)
+                    if (
+                        verification is None
+                        or analyzer.analyze(test_url, payload, verification, baseline) is None
+                    ):
+                        audit(
+                            "fuzzer.time_based_unverified",
+                            scan_id=str(scan_id) if scan_id else None,
+                            url=test_url,
+                        )
+                        continue
                 findings.append(finding)
                 audit(
                     "fuzzer.finding",

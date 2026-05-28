@@ -10,6 +10,7 @@ from bounty_agent.fuzzing.analyzers import (
     ReflectedXssAnalyzer,
     SqlInjectionAnalyzer,
     StatusDeltaAnalyzer,
+    TimeBasedSqlInjectionAnalyzer,
 )
 from bounty_agent.fuzzing.fuzzer import FUZZ_MARKER, FuzzerConfig, ResponsibleFuzzer
 from bounty_agent.fuzzing.payloads import PayloadRegistry
@@ -28,4 +29,5 @@ __all__ = [
     "ResponsibleFuzzer",
     "SqlInjectionAnalyzer",
     "StatusDeltaAnalyzer",
+    "TimeBasedSqlInjectionAnalyzer",
 ]

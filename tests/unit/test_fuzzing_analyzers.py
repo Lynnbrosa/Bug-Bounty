@@ -11,6 +11,7 @@ from bounty_agent.fuzzing import (
     ReflectedXssAnalyzer,
     SqlInjectionAnalyzer,
     StatusDeltaAnalyzer,
+    TimeBasedSqlInjectionAnalyzer,
 )
 
 
@@ -19,14 +20,87 @@ def _response(
     status_code: int = 200,
     text: str = "",
     content_type: str = "text/html; charset=utf-8",
+    elapsed_seconds: float | None = None,
 ) -> httpx.Response:
+    from datetime import timedelta
+
     request = httpx.Request("GET", "https://example.com/")
-    return httpx.Response(
+    response = httpx.Response(
         status_code=status_code,
         headers={"content-type": content_type},
         text=text,
         request=request,
     )
+    if elapsed_seconds is not None:
+        # httpx.Response.elapsed is settable post-construction.
+        response.elapsed = timedelta(seconds=elapsed_seconds)
+    return response
+
+
+class TestTimeBasedSqlInjectionAnalyzer:
+    def test_slow_response_with_sleep_payload_is_flagged(self) -> None:
+        analyzer = TimeBasedSqlInjectionAnalyzer()
+        slow = _response(elapsed_seconds=5.2)
+        baseline = _response(elapsed_seconds=0.1)
+        finding = analyzer.analyze(
+            "https://example.com/?id=1",
+            payload="1' AND SLEEP(5)--",
+            response=slow,
+            baseline=baseline,
+        )
+        assert finding is not None
+        assert finding.severity == Severity.HIGH
+        assert finding.evidence["delta_seconds"] >= 4.0
+
+    def test_fast_response_no_finding(self) -> None:
+        analyzer = TimeBasedSqlInjectionAnalyzer()
+        fast = _response(elapsed_seconds=0.2)
+        baseline = _response(elapsed_seconds=0.1)
+        finding = analyzer.analyze(
+            "https://example.com/?id=1",
+            payload="1' AND SLEEP(5)--",
+            response=fast,
+            baseline=baseline,
+        )
+        assert finding is None
+
+    def test_non_time_payload_skipped(self) -> None:
+        analyzer = TimeBasedSqlInjectionAnalyzer()
+        slow = _response(elapsed_seconds=8.0)
+        baseline = _response(elapsed_seconds=0.1)
+        # Slow response but the payload has no SLEEP-like fragment.
+        # Could be a slow query, not necessarily injectable -> skip.
+        finding = analyzer.analyze(
+            "https://example.com/?id=1",
+            payload="1' OR '1'='1",
+            response=slow,
+            baseline=baseline,
+        )
+        assert finding is None
+
+    def test_no_baseline_uses_absolute_floor(self) -> None:
+        analyzer = TimeBasedSqlInjectionAnalyzer()
+        slow = _response(elapsed_seconds=5.5)
+        finding = analyzer.analyze(
+            "https://example.com/?id=1",
+            payload="1; WAITFOR DELAY '0:0:5'--",
+            response=slow,
+            baseline=None,
+        )
+        assert finding is not None
+
+    def test_pg_sleep_signature_matched(self) -> None:
+        analyzer = TimeBasedSqlInjectionAnalyzer()
+        slow = _response(elapsed_seconds=6.0)
+        baseline = _response(elapsed_seconds=0.5)
+        finding = analyzer.analyze(
+            "https://example.com/?id=1",
+            payload="1; SELECT pg_sleep(5);--",
+            response=slow,
+            baseline=baseline,
+        )
+        assert finding is not None
+        assert "time-based" in finding.title.lower()
 
 
 class TestSqlInjectionAnalyzer:
