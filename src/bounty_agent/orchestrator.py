@@ -17,6 +17,7 @@ This is the unit that the CLI ``scan`` command calls.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
@@ -38,6 +39,8 @@ from bounty_agent.fuzzing import (
     ResponsibleFuzzer,
 )
 from bounty_agent.logging_setup import audit, bind_scan_context, get_logger
+from bounty_agent.oob import TokenRegistry
+from bounty_agent.oob.correlator import OobCorrelationConfig, OobCorrelator
 from bounty_agent.persistence.tool_cache import NoopToolCache, ToolCache
 from bounty_agent.recon.pipeline import ReconResult, run_recon_pipeline
 from bounty_agent.recon.waf import detect_async as detect_waf_async
@@ -52,7 +55,6 @@ from bounty_agent.tools import ToolRegistry
 
 if TYPE_CHECKING:
     from datetime import datetime
-    from pathlib import Path
     from uuid import UUID
 
 
@@ -77,11 +79,21 @@ class BountyAgent:
     ) -> None:
         self.config = config
         self.scope = scope or config.scope.as_policy()
+        # Build the OOB token registry once per orchestrator. The fuzzer
+        # writes to it; the correlator reads from it after the scan.
+        self.oob_token_registry: TokenRegistry | None = None
+        oob_domain: str | None = None
+        if config.oob.enabled and config.oob.domain:
+            token_log = Path(config.oob.token_log_path) if config.oob.token_log_path else None
+            self.oob_token_registry = TokenRegistry(persist_path=token_log)
+            oob_domain = config.oob.domain
         self.fuzzer = fuzzer or ResponsibleFuzzer(
             config=config.agent.as_fuzzer_config(),
             registry=payload_registry,
             scope=self.scope,
             analyzers=DEFAULT_ANALYZERS,
+            oob_token_registry=self.oob_token_registry,
+            oob_domain=oob_domain,
         )
         self.nuclei = nuclei or NucleiScanner(
             config=config.nuclei.as_nuclei_config(), scope=self.scope
@@ -125,6 +137,7 @@ class BountyAgent:
         """
         scan_id = uuid4()
         bind_scan_context(scan_id, target)
+        scan_started_at = _utcnow()
 
         ctx = target_context or TargetContext()
         audit(
@@ -258,6 +271,32 @@ class BountyAgent:
             result = self._with_findings(result, nuclei_findings)
             if nuclei_errors:
                 result = result.model_copy(update={"errors": list(result.errors) + nuclei_errors})
+
+        # OOB correlator: wait the configured window, then fetch the
+        # callbacks recorded since scan_started_at and pair them back
+        # to the tokens issued by the fuzzer. Each match becomes a
+        # CRITICAL finding with confidence 1.0.
+        if (
+            self.config.oob.enabled
+            and self.oob_token_registry is not None
+            and (self.config.oob.poll_url or self.config.oob.local_log_path)
+        ):
+            correlator = OobCorrelator(
+                OobCorrelationConfig(
+                    poll_url=self.config.oob.poll_url,
+                    local_log_path=(
+                        Path(self.config.oob.local_log_path)
+                        if self.config.oob.local_log_path
+                        else None
+                    ),
+                    wait_seconds=self.config.oob.poll_after_scan_seconds,
+                )
+            )
+            oob_findings = await correlator.correlate(
+                self.oob_token_registry, scan_started_at=scan_started_at
+            )
+            if oob_findings:
+                result = self._with_findings(result, oob_findings)
 
         finished_at = _utcnow()
         result = result.model_copy(update={"finished_at": finished_at})

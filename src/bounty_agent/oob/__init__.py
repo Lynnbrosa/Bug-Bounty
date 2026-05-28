@@ -16,12 +16,15 @@ This is the same shape as Burp Collaborator and projectdiscovery
 Interactsh.
 """
 
+from bounty_agent.oob.client import OobClient
 from bounty_agent.oob.server import CallbackEvent, CallbackLog, OobServer
-from bounty_agent.oob.tokens import OobToken, TokenRegistry, generate_token
+from bounty_agent.oob.tokens import OOB_PLACEHOLDER, OobToken, TokenRegistry, generate_token
 
 __all__ = [
+    "OOB_PLACEHOLDER",
     "CallbackEvent",
     "CallbackLog",
+    "OobClient",
     "OobServer",
     "OobToken",
     "TokenRegistry",

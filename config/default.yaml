@@ -84,3 +84,16 @@ llm:
   model: claude-haiku-4-5
   max_tokens: 1024
   response_excerpt_chars: 2000
+
+# Out-of-band callback receiver. When enabled, payloads that contain the
+# literal placeholder {OOB_URL} have it replaced with a unique token
+# under your wildcard domain. After the scan, the agent polls
+# callbacks (locally via local_log_path OR remotely via poll_url) and
+# emits CRITICAL findings for any backend that dialled out.
+oob:
+  enabled: false
+  domain: ""                              # e.g. callback.example.com
+  local_log_path: null                    # local mode (same machine)
+  poll_url: null                          # remote mode (VPS), e.g. http://callback.example.com:8080
+  poll_after_scan_seconds: 30
+  token_log_path: null                    # optional JSONL audit of issued tokens

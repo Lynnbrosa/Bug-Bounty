@@ -35,6 +35,7 @@ from bounty_agent.core import Finding, ScopePolicy
 from bounty_agent.fuzzing.analyzers import DEFAULT_ANALYZERS, Analyzer
 from bounty_agent.fuzzing.payloads import PayloadRegistry
 from bounty_agent.logging_setup import audit, get_logger
+from bounty_agent.oob.tokens import OOB_PLACEHOLDER, TokenRegistry
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -79,12 +80,20 @@ class ResponsibleFuzzer:
         registry: PayloadRegistry | None = None,
         scope: ScopePolicy | None = None,
         analyzers: tuple[Analyzer, ...] = DEFAULT_ANALYZERS,
+        oob_token_registry: TokenRegistry | None = None,
+        oob_domain: str | None = None,
     ) -> None:
         self.config = config or FuzzerConfig()
         self.registry = registry or PayloadRegistry.from_mapping({})
         self.scope = scope
         self.analyzers = analyzers
         self._request_times: list[float] = []
+        # OOB integration. When both are set, payloads containing the
+        # ``{OOB_URL}`` placeholder are minted a unique token and sent
+        # to ``<token>.<oob_domain>``. The correlator pairs callbacks
+        # back via :class:`TokenRegistry.lookup`.
+        self.oob_token_registry = oob_token_registry
+        self.oob_domain = oob_domain
 
     def _next_delay(self) -> float:
         lo = self.config.min_delay_seconds
@@ -249,7 +258,10 @@ class ResponsibleFuzzer:
         )
 
         findings: list[Finding] = []
-        for payload in payloads:
+        for raw_payload in payloads:
+            payload = self._materialise_oob(
+                payload=raw_payload, target_url=url, category=category, scan_id=scan_id
+            )
             for marker_key in markers:
                 test_body = dict(body_template)
                 for k, v in test_body.items():
@@ -319,7 +331,10 @@ class ResponsibleFuzzer:
         baseline = await self._safe_request(client, "GET", url)
         findings: list[Finding] = []
 
-        for payload in payloads:
+        for raw_payload in payloads:
+            payload = self._materialise_oob(
+                payload=raw_payload, target_url=url, category=category, scan_id=scan_id
+            )
             test_url = injector(payload)
             response = await self._safe_request(client, "GET", test_url)
             if response is None:
@@ -348,6 +363,32 @@ class ResponsibleFuzzer:
             duration_seconds=round(time.monotonic() - started, 3),
         )
         return findings
+
+    def _materialise_oob(
+        self,
+        payload: str,
+        target_url: str,
+        category: str,
+        scan_id: UUID | None,
+    ) -> str:
+        """Substitute ``{OOB_URL}`` in ``payload`` with a fresh token.
+
+        If OOB is not configured or the payload doesn't contain the
+        placeholder, the payload is returned unchanged. Otherwise a
+        new token is registered (and persisted) so the post-scan
+        correlator can later identify which payload caused which
+        callback.
+        """
+        if self.oob_token_registry is None or not self.oob_domain or OOB_PLACEHOLDER not in payload:
+            return payload
+        token = self.oob_token_registry.register(
+            target_url=target_url,
+            payload=payload,
+            category=category,
+            scan_id=scan_id,
+        )
+        oob_host = f"{token.token}.{self.oob_domain}"
+        return payload.replace(OOB_PLACEHOLDER, oob_host)
 
     @staticmethod
     def _inject_param(url: str, param: str, payload: str) -> str:

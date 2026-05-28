@@ -153,6 +153,13 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self._record_and_respond()
 
     def _record_and_respond(self) -> None:
+        # Special API path for polling clients (scanner side). The
+        # API is namespaced under /__oob/ so it doesn't shadow any
+        # legitimate path the operator's blind payloads might probe.
+        if self.path.startswith("/__oob/callbacks"):
+            self._handle_api_callbacks()
+            return
+
         host = self.headers.get("Host", "")
         token = extract_token(host, self.server.root_domain)
         if token is not None:
@@ -173,6 +180,58 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _handle_api_callbacks(self) -> None:
+        """Return recorded callbacks as JSON. Optional ?since=<iso>."""
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        since_iso = (params.get("since") or [""])[0]
+        events: list[CallbackEvent]
+        if since_iso:
+            try:
+                since = datetime.fromisoformat(since_iso)
+            except ValueError:
+                self._json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "since must be ISO-8601 datetime"},
+                )
+                return
+            events = self.server.log.since(since)
+        else:
+            events = self.server.log.all_events()
+        payload = json.dumps(
+            {
+                "events": [
+                    {
+                        "token": e.token,
+                        "protocol": e.protocol,
+                        "src_ip": e.src_ip,
+                        "method": e.method,
+                        "path": e.path,
+                        "host": e.host,
+                        "user_agent": e.user_agent,
+                        "timestamp": e.timestamp.isoformat(),
+                    }
+                    for e in events
+                ],
+            }
+        )
+        self._json_response(HTTPStatus.OK, raw=payload)
+
+    def _json_response(
+        self,
+        status: HTTPStatus,
+        body: dict[str, object] | None = None,
+        raw: str | None = None,
+    ) -> None:
+        encoded = (raw if raw is not None else json.dumps(body or {})).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
 
 
 class OobServer(ThreadingHTTPServer):

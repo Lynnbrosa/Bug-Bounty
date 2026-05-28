@@ -21,6 +21,11 @@ from pathlib import Path
 from typing import Self
 from uuid import UUID
 
+#: Placeholder substituted in payloads at fuzz time. Each substitution
+#: mints a unique token, so every payload-issued callback is
+#: traceable back to the exact (target_url, payload) pair.
+OOB_PLACEHOLDER = "{OOB_URL}"
+
 # 16 chars of url-safe-base64 = 96 bits of entropy. Long enough to
 # rule out collisions across many parallel scans, short enough to fit
 # in a subdomain label (max 63 chars).
@@ -124,4 +129,4 @@ class TokenRegistry:
             fh.write(token.to_jsonl() + "\n")
 
 
-__all__ = ["OobToken", "TokenRegistry", "generate_token"]
+__all__ = ["OOB_PLACEHOLDER", "OobToken", "TokenRegistry", "generate_token"]

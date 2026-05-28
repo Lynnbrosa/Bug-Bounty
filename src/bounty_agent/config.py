@@ -146,6 +146,35 @@ class LLMSettings(_FrozenModel):
     response_excerpt_chars: int = 2000
 
 
+class OobSettings(_FrozenModel):
+    """Out-of-band callback receiver integration.
+
+    When ``enabled``, the fuzzer substitutes ``{OOB_URL}`` placeholders
+    in payloads with a unique token under ``domain``. After the scan,
+    the orchestrator polls callbacks (locally via ``local_log_path``
+    or remotely via ``poll_url``) and emits CRITICAL findings for any
+    payload whose token shows up in the callback log.
+    """
+
+    enabled: bool = False
+    # The wildcard root domain you control. Token URLs become
+    # ``<token>.<domain>``. Required when enabled.
+    domain: str = ""
+    # Local-mode source. The orchestrator reads this JSONL directly
+    # (same file format that ``oob serve --persist`` produces).
+    local_log_path: str | None = None
+    # Remote-mode source. HTTP polling against the OobServer's
+    # ``/api/callbacks?since=<iso>`` endpoint. Mutually exclusive with
+    # ``local_log_path``; if both are set, ``poll_url`` wins.
+    poll_url: str | None = None
+    # Wait this many seconds after the scan completes before polling,
+    # so slow targets that fire callbacks late still get matched.
+    poll_after_scan_seconds: int = 30
+    # Per-token registry JSONL. Defaults to a sibling of the scan
+    # report so the operator can audit which payloads issued tokens.
+    token_log_path: str | None = None
+
+
 class Config(BaseSettings):
     """Top-level configuration loaded from YAML and environment."""
 
@@ -178,6 +207,7 @@ class Config(BaseSettings):
     tools: ToolsSettings = Field(default_factory=ToolsSettings)
     tools_cache: ToolsCacheSettings = Field(default_factory=ToolsCacheSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    oob: OobSettings = Field(default_factory=OobSettings)
 
     @classmethod
     def settings_customise_sources(
